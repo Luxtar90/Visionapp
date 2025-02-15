@@ -1,38 +1,91 @@
 import { useState } from "react";
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, 
+  ActivityIndicator, Modal, Platform, KeyboardAvoidingView, ScrollView 
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../src/constants/config";  // ✅ Importar la URL de la API
+import API_URL from "../src/constants/config";
+import CustomAlert from "../src/components/CustomAlert";
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [currentField, setCurrentField] = useState<'email' | 'password' | null>(null);
+  const [alert, setAlert] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setAlert({
+      visible: true,
+      title,
+      message,
+      type
+    });
+  };
+
+  const openModal = (field: 'email' | 'password') => {
+    setCurrentField(field);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setCurrentField(null);
+  };
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Por favor, ingresa correo y contraseña.");
+      showAlert(
+        "Campos requeridos",
+        "Por favor, ingresa tu correo y contraseña",
+        'warning'
+      );
       return;
     }
 
+    if (!validateEmail(email)) {
+      showAlert(
+        "Correo inválido",
+        "Por favor, ingresa un correo electrónico válido",
+        'error'
+      );
+      return;
+    }
+
+    setLoading(true);
     try {
-      console.log("📡 Enviando solicitud a:", `${API_URL}/auth/login`);
-      console.log("📤 Datos enviados:", { email, password });
+      console.log(" Enviando solicitud a:", `${API_URL}/auth/login`);
+      console.log(" Datos enviados:", { email, password });
 
       const response = await axios.post(`${API_URL}/auth/login`, { email, password });
 
-      console.log("✅ Respuesta del servidor:", response.data);
+      console.log(" Respuesta del servidor:", response.data);
 
       if (response.status === 200) {
         const { token, user } = response.data;
 
-        // Verificar si el usuario tiene un cliente asociado
         try {
-          // Intentamos crear el cliente con el mismo ID del usuario
           const clientResponse = await axios.post(`${API_URL}/clients`, {
             userId: user.id,
             name: user.name
@@ -43,100 +96,428 @@ export default function LoginScreen() {
             }
           });
 
-          console.log("✅ Cliente creado:", clientResponse.data);
+          console.log(" Cliente creado:", clientResponse.data);
+          showAlert("¡Éxito!", "Perfil de cliente creado exitosamente", 'success');
         } catch (clientError: any) {
-          // Si el error es 409 (Conflict) significa que el cliente ya existe
           if (clientError.response?.status !== 409) {
-            console.error("❌ Error al crear el cliente:", clientError);
+            console.error(" Error al crear el cliente:", clientError);
+            showAlert(
+              "Error de registro",
+              "No se pudo crear el perfil de cliente",
+              'error'
+            );
           } else {
-            console.log("ℹ️ El cliente ya existe");
+            console.log(" El cliente ya existe");
           }
         }
 
-        // Guardar token, userId y userRole en AsyncStorage
         await AsyncStorage.setItem("token", token);
         await AsyncStorage.setItem("userId", String(user.id));
         await AsyncStorage.setItem("userRole", user.role);
 
-        console.log("🔐 Token guardado:", token);
-        console.log("👤 ID Usuario guardado:", user.id);
+        console.log(" Token guardado:", token);
+        console.log(" ID Usuario guardado:", user.id);
 
-        Alert.alert("Bienvenido", "Inicio de sesión exitoso");
-        router.push("/(tabs)/search");
+        showAlert(
+          "¡Bienvenido!",
+          `${user.name ? user.name : 'Usuario'}`,
+          'success'
+        );
+        
+        // Redirigir después de que se cierre la alerta
+        setTimeout(() => {
+          router.push("/(tabs)/search");
+        }, 1500);
       }
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
-        console.error("❌ Error en la petición Axios:");
-        console.error("🔗 URL:", error.config?.url);
-        console.error("📡 Método:", error.config?.method);
-        console.error("📤 Datos enviados:", error.config?.data);
-        console.error("🔴 Código de error:", error.response?.status || "No disponible");
-        console.error("📩 Mensaje del servidor:", error.response?.data || "No disponible");
-      } else {
-        console.error("⚠️ Error desconocido:", error);
-      }
+        console.error(" Error en la petición Axios:");
+        console.error(" URL:", error.config?.url);
+        console.error(" Método:", error.config?.method);
+        console.error(" Datos enviados:", error.config?.data);
+        console.error(" Código de error:", error.response?.status || "No disponible");
+        console.error(" Mensaje del servidor:", error.response?.data || "No disponible");
 
-      Alert.alert("Error", error.response?.data?.message || "No se pudo conectar con el servidor. Revisa los logs.");
+        let errorMessage = "No se pudo conectar con el servidor";
+        let errorTitle = "Error de conexión";
+
+        if (error.response?.status === 401) {
+          errorMessage = "Correo o contraseña incorrectos";
+          errorTitle = "Error de autenticación";
+        } else if (error.response?.status === 404) {
+          errorMessage = "Usuario no encontrado";
+          errorTitle = "Error de autenticación";
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+
+        showAlert(errorTitle, errorMessage, 'error');
+      } else {
+        console.error(" Error desconocido:", error);
+        showAlert(
+          "Error",
+          "Ocurrió un error inesperado. Por favor, intenta de nuevo más tarde.",
+          'error'
+        );
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Ionicons name="eye-outline" size={40} color="#6B46C1" />
-        <Text style={styles.title}>Iniciar Sesión</Text>
-        <Text style={styles.subtitle}>Bienvenido de vuelta</Text>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView 
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            <View style={styles.logoContainer}>
+              <Ionicons name="eye-outline" size={40} color="#6B46C1" />
+              <View style={styles.logoGlow} />
+            </View>
+            <Text style={styles.title}>Iniciar Sesión</Text>
+            <Text style={styles.subtitle}>Bienvenido de vuelta</Text>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="#718096" style={styles.inputIcon} />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Correo Electrónico" 
-              placeholderTextColor="#718096"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <View style={styles.form}>
+              <TouchableOpacity 
+                style={styles.inputContainer}
+                onPress={() => openModal('email')}
+              >
+                <Ionicons name="mail-outline" size={24} color="#666" />
+                <Text style={[styles.input, email ? styles.filledInput : styles.placeholderText]}>
+                  {email || "Correo electrónico"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.inputContainer}
+                onPress={() => openModal('password')}
+              >
+                <Ionicons name="lock-closed-outline" size={24} color="#666" />
+                <Text style={[styles.input, password ? styles.filledInput : styles.placeholderText]}>
+                  {password ? "••••••••" : "Contraseña"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[
+                  styles.primaryButton, 
+                  loading && styles.disabledButton,
+                  email.length > 0 && password.length > 0 && styles.primaryButtonActive
+                ]} 
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="log-in-outline" size={24} color="#FFFFFF" style={styles.buttonIcon} />
+                    <Text style={styles.primaryButtonText}>Iniciar Sesión</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>O</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity 
+                style={styles.secondaryButton} 
+                onPress={() => router.push("/create-account")}
+                disabled={loading}
+              >
+                <Ionicons name="person-add-outline" size={24} color="#6B46C1" style={styles.buttonIcon} />
+                <Text style={styles.secondaryButtonText}>Crear Nueva Cuenta</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#718096" style={styles.inputIcon} />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Contraseña" 
-              secureTextEntry 
-              placeholderTextColor="#718096"
-              value={password}
-              onChangeText={setPassword}
-            />
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {currentField === 'email' ? "Correo electrónico" : "Contraseña"}
+              </Text>
+              <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalInputContainer}>
+              <Ionicons 
+                name={currentField === 'email' ? "mail-outline" : "lock-closed-outline"} 
+                size={24} 
+                color="#6B46C1" 
+              />
+              <TextInput
+                style={styles.modalInput}
+                placeholder={currentField === 'email' ? "Correo electrónico" : "Contraseña"}
+                value={currentField === 'email' ? email : password}
+                onChangeText={currentField === 'email' ? setEmail : setPassword}
+                keyboardType={currentField === 'email' ? "email-address" : "default"}
+                secureTextEntry={currentField === 'password' && !showPassword}
+                autoCapitalize="none"
+                autoFocus={true}
+              />
+              {currentField === 'password' && (
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.modalEyeIcon}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={24}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity 
+              style={styles.modalButton}
+              onPress={closeModal}
+            >
+              <Text style={styles.modalButtonText}>Aceptar</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity style={styles.primaryButton} onPress={handleLogin}>
-            <Text style={styles.primaryButtonText}>Entrar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/create-account")}>
-            <Text style={styles.secondaryButtonText}>Crear Cuenta</Text>
-          </TouchableOpacity>
         </View>
-      </View>
+      </Modal>
+      <CustomAlert
+        visible={alert.visible}
+        title={alert.title}
+        message={alert.message}
+        type={alert.type}
+        onClose={() => setAlert(prev => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAF5FF" },
-  content: { flex: 1, padding: 20, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 32, fontWeight: "bold", color: "#2D3748", marginTop: 16 },
-  subtitle: { fontSize: 16, color: "#718096", marginTop: 8 },
-  form: { width: "100%", marginTop: 20 },
-  inputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0", paddingHorizontal: 16, height: 50, marginBottom: 10 },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, fontSize: 16, color: "#2D3748" },
-  primaryButton: { backgroundColor: "#6B46C1", height: 50, borderRadius: 12, justifyContent: "center", alignItems: "center", marginTop: 16 },
-  primaryButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-  secondaryButton: { height: 50, borderRadius: 12, justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "#6B46C1", marginTop: 12 },
-  secondaryButtonText: { color: "#6B46C1", fontSize: 16, fontWeight: "bold" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#FAF5FF" 
+  },
+  content: { 
+    flex: 1, 
+    padding: 24, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#F3EAFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+    elevation: 5,
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  logoGlow: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#6B46C1",
+    opacity: 0.15,
+    transform: [{ scale: 1.2 }],
+  },
+  title: { 
+    fontSize: 36,
+    fontWeight: "bold",
+    color: "#2D3748",
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  subtitle: { 
+    fontSize: 17,
+    color: "#718096",
+    letterSpacing: 0.3,
+  },
+  form: { 
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 24,
+    marginTop: 32,
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  inputContainer: { 
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7FAFC",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 16,
+    height: 56,
+    marginBottom: 16,
+  },
+  inputIcon: { 
+    marginRight: 12 
+  },
+  input: { 
+    flex: 1,
+    fontSize: 16,
+    color: "#2D3748",
+  },
+  passwordInput: {
+    flex: 1,
+    marginRight: 40,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 10,
+    padding: 5,
+  },
+  primaryButton: { 
+    flexDirection: "row",
+    backgroundColor: "#9F7AEA",
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 24,
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryButtonActive: {
+    backgroundColor: "#6B46C1",
+    shadowOpacity: 0.3,
+    elevation: 6,
+  },
+  disabledButton: {
+    backgroundColor: "#E9D8FD",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  primaryButtonText: { 
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E2E8F0",
+  },
+  dividerText: {
+    color: "#718096",
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  secondaryButton: { 
+    flexDirection: "row",
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#E9D8FD",
+    backgroundColor: "#FAF5FF",
+  },
+  secondaryButtonText: { 
+    color: "#6B46C1",
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    minHeight: 300,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2D3748',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  modalInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7FAFC',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+  },
+  modalInput: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#2D3748',
+  },
+  modalEyeIcon: {
+    padding: 5,
+  },
+  modalButton: {
+    backgroundColor: '#6B46C1',
+    borderRadius: 12,
+    padding: 15,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  placeholderText: {
+    color: '#718096',
+  },
+  filledInput: {
+    color: '#2D3748',
+  },
 });

@@ -5,9 +5,11 @@ import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../../src/constants/config"; 
+import { useAlert } from '../../hooks/useAlert';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { showSuccess, showError } = useAlert();
   const [user, setUser] = useState({
     id: null,
     name: "Cargando...",
@@ -58,10 +60,14 @@ export default function ProfileScreen() {
   );
 
   const handleLogout = async () => {
-    console.log("🚪 Cerrando sesión...");
-    await AsyncStorage.removeItem("token");
-    await AsyncStorage.removeItem("userId");
-    router.push("/login");
+    try {
+      await AsyncStorage.removeItem("token");
+      await AsyncStorage.removeItem("userId");
+      showSuccess('Has cerrado sesión exitosamente', 'Hasta pronto');
+      router.push("/login");
+    } catch (error) {
+      showError('No se pudo cerrar sesión', 'Error');
+    }
   };
 
   return (
@@ -167,31 +173,154 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAF5FF" },
-  header: { backgroundColor: "#6B46C1", padding: 20, paddingTop: 60, alignItems: "center", borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-  profileImageContainer: { position: "relative", marginBottom: 16 },
-  profileImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: "#FFFFFF" },
-  editImageButton: { position: "absolute", right: 0, bottom: 0, backgroundColor: "#6B46C1", width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center", borderWidth: 3, borderColor: "#FFFFFF" },
-  name: { fontSize: 24, fontWeight: "bold", color: "#FFFFFF", marginBottom: 4 },
-  email: { fontSize: 16, color: "#E9D8FD", marginBottom: 4 },
-  role: { fontSize: 16, color: "#E9D8FD", fontWeight: "bold", marginBottom: 20 },
-  content: { padding: 20 },
-  section: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 20, shadowColor: "#6B46C1", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", color: "#2D3748", marginBottom: 16 },
-  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
-  menuText: { flex: 1, marginLeft: 12, fontSize: 16, color: "#4A5568" },
-  logoutButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF5F5", padding: 16, borderRadius: 12, borderWidth: 1, borderColor: "#FED7D7" },
-  logoutText: { marginLeft: 8, fontSize: 16, fontWeight: "600", color: "#E53E3E" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#F8F9FF"
+  },
+  header: { 
+    backgroundColor: "#6B46C1", 
+    padding: 24,
+    paddingTop: 60, 
+    alignItems: "center", 
+    borderBottomLeftRadius: 40, 
+    borderBottomRightRadius: 40,
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  profileImageContainer: { 
+    position: "relative", 
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  profileImage: { 
+    width: 110, 
+    height: 110, 
+    borderRadius: 55, 
+    borderWidth: 4, 
+    borderColor: "#FFFFFF" 
+  },
+  editImageButton: { 
+    position: "absolute", 
+    right: -4, 
+    bottom: -4, 
+    backgroundColor: "#6B46C1", 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    borderWidth: 3, 
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  name: { 
+    fontSize: 26, 
+    fontWeight: "700", 
+    color: "#FFFFFF", 
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
+  email: { 
+    fontSize: 16, 
+    color: "#E9D8FD", 
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
+  role: { 
+    fontSize: 15, 
+    color: "#FFFFFF", 
+    fontWeight: "600", 
+    marginBottom: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  content: { 
+    padding: 20,
+    paddingTop: 30,
+  },
+  section: { 
+    backgroundColor: "#FFFFFF", 
+    borderRadius: 20, 
+    padding: 20, 
+    marginBottom: 24,
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.08, 
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(107, 70, 193, 0.08)",
+  },
+  sectionTitle: { 
+    fontSize: 19, 
+    fontWeight: "700", 
+    color: "#2D3748", 
+    marginBottom: 20,
+    letterSpacing: 0.3,
+  },
+  menuItem: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1, 
+    borderBottomColor: "#EDF2F7",
+  },
+  menuText: { 
+    flex: 1, 
+    marginLeft: 14, 
+    fontSize: 16, 
+    color: "#4A5568",
+    fontWeight: "500",
+  },
+  logoutButton: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    backgroundColor: "#FFF5F5", 
+    padding: 18,
+    borderRadius: 16, 
+    borderWidth: 1.5, 
+    borderColor: "#FED7D7",
+    shadowColor: "#E53E3E",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  logoutText: { 
+    marginLeft: 10, 
+    fontSize: 17, 
+    fontWeight: "600", 
+    color: "#E53E3E",
+    letterSpacing: 0.3,
+  },
   badgeContainer: {
     backgroundColor: '#F3E8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "rgba(107, 70, 193, 0.1)",
   },
   badgeText: {
     color: '#6B46C1',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });

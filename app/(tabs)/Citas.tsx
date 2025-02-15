@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { 
-  View, Text, TouchableOpacity, FlatList, StyleSheet, Alert, ActivityIndicator, SafeAreaView, ScrollView 
+  View, Text, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, SafeAreaView, ScrollView 
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../../src/constants/config";
+import { useAlert } from '../../hooks/useAlert';
 
 const CitasScreen = () => {
+  const { showSuccess, showError, showInfo } = useAlert();
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [availableHours, setAvailableHours] = useState<string[]>([]);
   const [reservedHours, setReservedHours] = useState<string[]>([]);
@@ -40,10 +42,11 @@ const CitasScreen = () => {
       } else {
         console.warn("⚠️ Formato de datos inesperado:", response.data);
         setEmployees([]);
+        showError("Formato de datos inesperado", "Error al cargar empleados");
       }
     } catch (error) {
       console.error("❌ Error al cargar empleados:", error);
-      Alert.alert("Error", "No se pudieron cargar los empleados.");
+      showError("No se pudieron cargar los empleados", "Error de conexión");
     } finally {
       setLoadingEmployees(false);
     }
@@ -51,24 +54,25 @@ const CitasScreen = () => {
 
   const [clientId, setClientId] = useState<number | null>(null);
 
-useEffect(() => {
-  const fetchUserId = async () => {
-    try {
-      const userIdString = await AsyncStorage.getItem("userId");
-      if (!userIdString) {
-        console.error("❌ No se encontró el ID del usuario logueado");
-        Alert.alert("Error", "No se encontró el ID del usuario logueado.");
-        return;
+  useEffect(() => {
+    const fetchUserId = async () => {
+      try {
+        const userIdString = await AsyncStorage.getItem("userId");
+        if (!userIdString) {
+          console.error("❌ No se encontró el ID del usuario logueado");
+          showError("No se encontró el ID del usuario", "Error de sesión");
+          return;
+        }
+        setClientId(Number(userIdString));
+        console.log("✅ ID del usuario logueado:", Number(userIdString));
+      } catch (error) {
+        console.error("❌ Error al obtener el ID del usuario logueado:", error);
+        showError("Error al obtener información del usuario", "Error de sesión");
       }
-      setClientId(Number(userIdString)); // Guarda el ID en el estado
-      console.log("✅ ID del usuario logueado:", Number(userIdString));
-    } catch (error) {
-      console.error("❌ Error al obtener el ID del usuario logueado:", error);
-    }
-  };
+    };
 
-  fetchUserId();
-}, []);
+    fetchUserId();
+  }, []);
 
   useEffect(() => {
     if (selectedDate && selectedEmployee) {
@@ -89,15 +93,12 @@ useEffect(() => {
       
       console.log("📅 Respuesta de disponibilidad:", JSON.stringify(response.data, null, 2));
 
-      // Ajuste para manejar la respuesta del backend
       if (Array.isArray(response.data)) {
-        // Si es un array, son todas las horas disponibles
         console.log("✅ Horas disponibles:", response.data);
         setAvailableHours(response.data);
-        setReservedHours([]); // Limpiar horas reservadas
+        setReservedHours([]);
       } 
       else if (response.data?.availableSlots && response.data?.reservedSlots) {
-        // Si es un objeto con ambos arrays
         console.log("✅ Horas disponibles:", response.data.availableSlots);
         console.log("❌ Horas reservadas:", response.data.reservedSlots);
         setAvailableHours(response.data.availableSlots);
@@ -107,10 +108,11 @@ useEffect(() => {
         console.warn("⚠️ Formato de datos inesperado:", response.data);
         setAvailableHours([]);
         setReservedHours([]);
+        showError("Formato de datos inesperado", "Error al cargar horarios");
       }
     } catch (error) {
       console.error("❌ Error al cargar horarios:", error);
-      Alert.alert("Error", "No se pudieron cargar los horarios disponibles.");
+      showError("No se pudieron cargar los horarios disponibles", "Error de conexión");
       setAvailableHours([]);
       setReservedHours([]);
     } finally {
@@ -121,7 +123,7 @@ useEffect(() => {
   const handleConfirmReservation = async () => {
     if (!selectedDate || !selectedHour || !selectedEmployee) {
       console.warn("⚠️ Faltan datos para la reserva");
-      Alert.alert("Error", "Seleccione fecha, hora y empleado.");
+      showInfo("Seleccione fecha, hora y empleado", "Datos incompletos");
       return;
     }
 
@@ -136,10 +138,9 @@ useEffect(() => {
 
       const userId = Number(userIdString);
       
-      // Asegurarnos que el clientId sea igual al userId
       const reservationData = {
         employeeId: selectedEmployee,
-        clientId: Number(userId), // Asegurarnos que sea número
+        clientId: Number(userId),
         date: selectedDate,
         time: selectedHour,
         status: "pending",
@@ -155,14 +156,15 @@ useEffect(() => {
       console.log("✅ Respuesta del servidor:", response.data);
       
       if (response.status === 201 || response.status === 200) {
-        Alert.alert("Éxito", "Tu cita ha sido agendada correctamente.");
+        showSuccess(
+          "Tu cita ha sido agendada correctamente",
+          "Reserva confirmada"
+        );
         
-        // Actualizar las listas de horas
         setReservedHours(prev => [...prev, selectedHour]);
         setAvailableHours(prev => prev.filter(hour => hour !== selectedHour));
         setSelectedHour(null);
         
-        // Recargar los horarios disponibles
         fetchAvailableHours(selectedDate, selectedEmployee);
       }
       
@@ -171,17 +173,19 @@ useEffect(() => {
       console.error("❌ Detalles del error:", error.response?.data);
       
       let errorMessage = "No se pudo completar la reserva. Por favor, intenta de nuevo.";
+      let errorTitle = "Error al reservar";
       
-      // Manejar diferentes tipos de errores
       if (error.response?.status === 404) {
         errorMessage = "No se encontró tu información de cliente. Por favor, contacta al soporte.";
+        errorTitle = "Cliente no encontrado";
       } else if (error.response?.status === 403) {
         errorMessage = "No tienes permisos para realizar esta acción.";
+        errorTitle = "Acceso denegado";
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       }
       
-      Alert.alert("Error", errorMessage);
+      showError(errorMessage, errorTitle);
     } finally {
       setSavingReservation(false);
     }
@@ -325,85 +329,106 @@ useEffect(() => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF5FF',
+    backgroundColor: '#F8F9FF',
   },
   header: {
     backgroundColor: '#6B46C1',
-    padding: 20,
+    padding: 24,
     paddingTop: 60,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    borderBottomLeftRadius: 35,
+    borderBottomRightRadius: 35,
+    shadowColor: '#6B46C1',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 34,
+    fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 17,
     color: '#E9D8FD',
+    letterSpacing: 0.3,
   },
   scrollView: {
     flex: 1,
   },
   content: {
     padding: 20,
+    paddingTop: 30,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 30,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#2D3748',
-    marginBottom: 16,
+    marginBottom: 20,
+    letterSpacing: 0.3,
   },
   calendarContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 10,
+    borderRadius: 24,
+    padding: 16,
+    shadowColor: '#6B46C1',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(107, 70, 193, 0.08)',
+  },
+  calendar: {
+    borderRadius: 20,
+  },
+  employeesContainer: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    gap: 16,
+  },
+  employeeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    width: 130,
+    minHeight: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#6B46C1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-  },
-  calendar: {
-    borderRadius: 12,
-  },
-  employeesContainer: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    gap: 12,
-  },
-  employeeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    width: 120,
-    minHeight: 100,  // Asegurar altura mínima
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
     marginRight: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(107, 70, 193, 0.1)',
   },
   selectedEmployeeCard: {
     backgroundColor: '#6B46C1',
+    borderColor: '#6B46C1',
+    shadowColor: '#6B46C1',
+    shadowOpacity: 0.3,
+    elevation: 6,
   },
   employeeIcon: {
-    marginBottom: 8,
+    marginBottom: 10,
+    backgroundColor: 'rgba(107, 70, 193, 0.1)',
+    borderRadius: 30,
+    padding: 8,
   },
   employeeText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#4A5568',
     textAlign: 'center',
     marginTop: 8,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   selectedEmployeeText: {
     color: '#FFFFFF',
@@ -411,32 +436,40 @@ const styles = StyleSheet.create({
   hoursContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
     paddingVertical: 10,
   },
   hourButton: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    minWidth: 100,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(107, 70, 193, 0.15)',
+    minWidth: 105,
     alignItems: 'center',
+    shadowColor: '#6B46C1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   selectedHour: {
     backgroundColor: '#6B46C1',
     borderColor: '#6B46C1',
+    shadowOpacity: 0.2,
+    elevation: 4,
   },
   reservedHour: {
-    backgroundColor: '#FED7D7',
+    backgroundColor: '#FFF5F5',
     borderColor: '#FEB2B2',
-    opacity: 0.8,
+    opacity: 0.9,
   },
   hourText: {
     fontSize: 16,
     color: '#4A5568',
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   selectedHourText: {
     color: '#FFFFFF',
@@ -448,55 +481,70 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#718096',
     textAlign: 'center',
-    marginVertical: 20,
+    marginVertical: 24,
+    fontWeight: '500',
   },
   reservedBadge: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: -10,
+    right: -10,
     backgroundColor: '#E53E3E',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
   },
   reservedBadgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   footer: {
     padding: 20,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: 'rgba(107, 70, 193, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
   },
   confirmButton: {
     backgroundColor: '#6B46C1',
-    padding: 16,
-    borderRadius: 12,
+    padding: 18,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   disabledButton: {
     backgroundColor: '#E2E8F0',
     shadowOpacity: 0,
   },
   buttonIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   confirmText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   loader: {
-    marginVertical: 20,
+    marginVertical: 24,
   },
 });
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { 
-  View, Text, FlatList, StyleSheet, ActivityIndicator, Alert, SafeAreaView, TouchableOpacity, RefreshControl 
+  View, Text, FlatList, StyleSheet, ActivityIndicator, Alert, SafeAreaView, 
+  TouchableOpacity, RefreshControl, Modal, Pressable, Platform 
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
@@ -14,6 +15,8 @@ const ListAppointmentsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const navigation = useNavigation();
 
   useFocusEffect(
@@ -165,8 +168,22 @@ const ListAppointmentsScreen = () => {
     serviceName: string;
   }
 
+  const handleAppointmentPress = (appointment: Appointment) => {
+    setSelectedAppointment(appointment);
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setSelectedAppointment(null);
+  };
+
   const renderAppointment = ({ item }: { item: Appointment }) => (
-    <View style={styles.appointmentCard}>
+    <TouchableOpacity 
+      style={styles.appointmentCard}
+      onPress={() => handleAppointmentPress(item)}
+      activeOpacity={0.7}
+    >
       <Ionicons name="calendar-outline" size={24} color="#6B46C1" />
       <View style={styles.appointmentInfo}>
         <Text style={styles.dateText}>{item.date} - {item.time}</Text>
@@ -183,23 +200,7 @@ const ListAppointmentsScreen = () => {
            'Cancelada'}
         </Text>
       </View>
-      {item.status !== 'cancelled' && (
-        <>
-          <TouchableOpacity 
-            style={styles.cancelButton} 
-            onPress={() => cancelAppointment(item.id)}
-          >
-            <Ionicons name="close-circle" size={24} color="#E53E3E" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.editButton} 
-            onPress={() => editAppointment(item)}
-          >
-            <Ionicons name="create-outline" size={24} color="#3182CE" />
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -208,24 +209,122 @@ const ListAppointmentsScreen = () => {
       {loading ? (
         <ActivityIndicator size="large" color="#6B46C1" />
       ) : (
-        <FlatList
-          data={appointments}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderAppointment}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={["#6B46C1"]}
-              tintColor="#6B46C1"
-            />
-          }
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              No tienes citas agendadas.
-            </Text>
-          }
-        />
+        <>
+          <FlatList
+            data={appointments}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderAppointment}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={["#6B46C1"]}
+                tintColor="#6B46C1"
+              />
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>
+                No tienes citas agendadas.
+              </Text>
+            }
+          />
+
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={modalVisible}
+            onRequestClose={handleCloseModal}
+            statusBarTranslucent
+          >
+            <Pressable 
+              style={styles.modalOverlay}
+              onPress={handleCloseModal}
+            >
+              <Pressable 
+                style={styles.modalContent}
+                onPress={(e) => e.stopPropagation()}
+              >
+                {selectedAppointment && (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Detalles de la Cita</Text>
+                      <TouchableOpacity
+                        onPress={handleCloseModal}
+                        style={styles.closeButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons name="close" size={24} color="#4A5568" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.modalBody}>
+                      <View style={styles.modalRow}>
+                        <Ionicons name="calendar" size={24} color="#6B46C1" />
+                        <Text style={styles.modalLabel}>Fecha y Hora:</Text>
+                        <Text style={styles.modalText}>
+                          {selectedAppointment.date} - {selectedAppointment.time}
+                        </Text>
+                      </View>
+
+                      <View style={styles.modalRow}>
+                        <Ionicons name="person" size={24} color="#6B46C1" />
+                        <Text style={styles.modalLabel}>Profesional:</Text>
+                        <Text style={styles.modalText}>{selectedAppointment.employeeName}</Text>
+                      </View>
+
+                      <View style={styles.modalRow}>
+                        <Ionicons name="medical" size={24} color="#6B46C1" />
+                        <Text style={styles.modalLabel}>Servicio:</Text>
+                        <Text style={styles.modalText}>{selectedAppointment.serviceName}</Text>
+                      </View>
+
+                      <View style={styles.modalRow}>
+                        <Ionicons name="information-circle" size={24} color="#6B46C1" />
+                        <Text style={styles.modalLabel}>Estado:</Text>
+                        <Text style={[
+                          styles.modalStatusText,
+                          selectedAppointment.status === 'pending' ? styles.pendingStatus :
+                          selectedAppointment.status === 'confirmed' ? styles.confirmedStatus :
+                          styles.cancelledStatus
+                        ]}>
+                          {selectedAppointment.status === 'pending' ? 'Pendiente' :
+                           selectedAppointment.status === 'confirmed' ? 'Confirmada' :
+                           'Cancelada'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {selectedAppointment.status !== 'cancelled' && (
+                      <View style={styles.modalActions}>
+                        <TouchableOpacity
+                          style={styles.modalEditButton}
+                          onPress={() => {
+                            handleCloseModal();
+                            editAppointment(selectedAppointment);
+                          }}
+                        >
+                          <Ionicons name="create" size={20} color="#FFFFFF" />
+                          <Text style={styles.modalButtonText}>Editar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.modalCancelButton}
+                          onPress={() => {
+                            handleCloseModal();
+                            cancelAppointment(selectedAppointment.id);
+                          }}
+                        >
+                          <Ionicons name="close-circle" size={20} color="#FFFFFF" />
+                          <Text style={styles.modalButtonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </>
+                )}
+              </Pressable>
+            </Pressable>
+          </Modal>
+        </>
       )}
     </SafeAreaView>
   );
@@ -234,66 +333,82 @@ const ListAppointmentsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF5FF",
-    padding: 20,
+    backgroundColor: "#F7FAFC",
+    padding: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#6B46C1",
-    marginBottom: 16,
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#2D3748",
+    marginBottom: 20,
+    marginTop: 8,
     textAlign: "center",
+    letterSpacing: 0.5,
   },
   appointmentCard: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
     alignItems: "center",
-    shadowColor: "#6B46C1",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "rgba(107, 70, 193, 0.1)",
   },
   appointmentInfo: {
-    marginLeft: 15,
+    marginLeft: 16,
     flex: 1,
   },
   dateText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2D3748",
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#1A202C",
+    marginBottom: 4,
   },
   employeeText: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#4A5568",
+    marginBottom: 2,
+    fontWeight: "500",
   },
   serviceText: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#4A5568",
-    marginTop: 2,
+    marginBottom: 6,
+    fontWeight: "500",
   },
   cancelButton: {
-    marginLeft: 10,
+    marginLeft: 8,
+    padding: 6,
+    backgroundColor: "rgba(229, 62, 62, 0.1)",
+    borderRadius: 12,
   },
   editButton: {
-    marginLeft: 10,
+    marginLeft: 8,
+    padding: 6,
+    backgroundColor: "rgba(49, 130, 206, 0.1)",
+    borderRadius: 12,
   },
   emptyText: {
     textAlign: "center",
     fontSize: 16,
     color: "#718096",
-    marginTop: 20,
+    marginTop: 32,
+    lineHeight: 24,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 13,
+    fontWeight: "600",
     marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    alignSelf: "flex-start",
   },
   pendingStatus: {
     backgroundColor: "#FEF9C3",
@@ -306,6 +421,106 @@ const styles = StyleSheet.create({
   cancelledStatus: {
     backgroundColor: "#FEE2E2",
     color: "#9B1C1C",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: Platform.OS === 'ios' ? 400 : '95%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2D3748',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  modalBody: {
+    marginBottom: 20,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4A5568',
+    marginLeft: 10,
+    marginRight: 8,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#2D3748',
+    flex: 1,
+  },
+  modalStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  modalEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3182CE',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flex: 1,
+    marginRight: 8,
+  },
+  modalCancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E53E3E',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flex: 1,
+    marginLeft: 8,
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
 

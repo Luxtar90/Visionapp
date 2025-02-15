@@ -6,7 +6,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../../../src/constants/config"; // ✅ Importación correcta
+import API_URL from "../../../src/constants/config";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -17,7 +17,7 @@ export default function EditProfileScreen() {
     name: "",
     email: "",
     telefono: "",
-    role: "", // ✅ Se mantiene el rol del usuario
+    role: "", // Se mantiene el rol del usuario
   });
 
   useEffect(() => {
@@ -38,26 +38,26 @@ export default function EditProfileScreen() {
         setUserId(Array.isArray(userIdToUse) ? userIdToUse[0] : userIdToUse);
         const token = await AsyncStorage.getItem("token");
 
-        console.log("📡 Cargando datos del usuario con ID:", userIdToUse);
+        console.log(" Cargando datos del usuario con ID:", userIdToUse);
 
         const response = await axios.get(`${API_URL}/users/${userIdToUse}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (response.status === 200) {
-          console.log("✅ Datos del usuario recibidos:", response.data);
+          console.log(" Datos del usuario recibidos:", response.data);
 
           setUser({
             name: response.data.name || "",
             email: response.data.email || "",
             telefono: response.data.telefono || "",
-            role: response.data.role?.nombre || "Sin rol", // ✅ Se mantiene el rol
+            role: response.data.role?.nombre || "Sin rol", // Se mantiene el rol
           });
         } else {
           throw new Error(`Error en la API: ${response.status}`);
         }
       } catch (error: any) {
-        console.error("❌ Error al obtener datos del usuario:", error.response?.data || error);
+        console.error(" Error al obtener datos del usuario:", error.response?.data || error);
         Alert.alert("Error", "No se pudo cargar la información del usuario.");
       }
     };
@@ -72,12 +72,12 @@ export default function EditProfileScreen() {
     }
 
     try {
-      console.log("📡 Enviando actualización a:", `${API_URL}/users/${userId}`);
-      console.log("📤 Datos enviados:", { name: user.name, email: user.email, telefono: user.telefono, role: user.role });
+      console.log(" Enviando actualización a:", `${API_URL}/users/${userId}`);
+      console.log(" Datos enviados:", { name: user.name, email: user.email, telefono: user.telefono, role: user.role });
 
       const token = await AsyncStorage.getItem("token");
 
-      // ✅ Se mantiene el rol sin modificarlo
+      // Se mantiene el rol sin modificarlo
       await axios.put(`${API_URL}/users/${userId}`, {
         name: user.name,
         email: user.email,
@@ -87,13 +87,13 @@ export default function EditProfileScreen() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      console.log("✅ Usuario actualizado correctamente.");
+      console.log(" Usuario actualizado correctamente.");
       Alert.alert("Éxito", "Perfil actualizado correctamente.");
       
       router.push("/(tabs)/profile");
 
     } catch (error: any) {
-      console.error("❌ Error al actualizar el usuario:", error.response?.data || error);
+      console.error(" Error al actualizar el usuario:", error.response?.data || error);
       Alert.alert("Error", "No se pudo actualizar el perfil.");
     }
   };

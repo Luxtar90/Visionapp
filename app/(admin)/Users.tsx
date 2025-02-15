@@ -1,261 +1,440 @@
-import { useState, useEffect } from "react";
-import { 
-  View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  Alert, ActivityIndicator, Modal 
+import { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  ScrollView
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../../src/constants/config";
-
-interface Role {
-  id: number;
-  nombre: string;
-  descripcion?: string;
-}
+import debounce from 'lodash/debounce';
 
 interface User {
   id: number;
   name: string;
   email: string;
-  role: Role;
+  telefono?: string;
+  role?: {
+    id: number;
+    nombre: string;
+  };
+  createdAt: string;
+}
+
+interface RouteParams {
+  id: string;
 }
 
 export default function AdminUsersScreen() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedRole, setSelectedRole] = useState("");
-
-  const roles = ["admin", "employee", "client"];
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRole, setSelectedRole] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const fetchUsers = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "No se encontró el token de autenticación");
+        return;
+      }
+
       const response = await axios.get(`${API_URL}/users`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
+
       setUsers(response.data);
+      applyFilters(response.data, searchQuery, selectedRole, sortBy, sortOrder);
     } catch (error) {
+      console.error("Error al cargar usuarios:", error);
       Alert.alert("Error", "No se pudieron cargar los usuarios");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRoleUpdate = async (userId: number, newRole: string) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      console.log("Actualizando rol:", { userId, newRole });
+  const applyFilters = useCallback((
+    data: User[],
+    query: string,
+    role: string,
+    sort: "name" | "date",
+    order: "asc" | "desc"
+  ) => {
+    let filtered = [...data];
 
-      await axios.patch(
-        `${API_URL}/users/${userId}/role`,
-        { role: newRole },
-        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    // Aplicar filtro de búsqueda
+    if (query) {
+      filtered = filtered.filter(user =>
+        user.name.toLowerCase().includes(query.toLowerCase()) ||
+        user.email.toLowerCase().includes(query.toLowerCase()) ||
+        (user.telefono && user.telefono.includes(query))
       );
-      Alert.alert("Éxito", "Rol actualizado correctamente");
-      fetchUsers();
-      setModalVisible(false);
-    } catch (error: any) {
-      console.error("Error al actualizar rol:", error.response?.data || error.message);
-      Alert.alert("Error", "No se pudo actualizar el rol");
     }
-  };
 
-  const renderUser = ({ item }: { item: User }) => (
-    <View style={styles.userCard}>
+    // Aplicar filtro de rol
+    if (role !== "all") {
+      filtered = filtered.filter(user => 
+        user.role?.nombre.toLowerCase() === role.toLowerCase()
+      );
+    }
+
+    // Aplicar ordenamiento
+    filtered.sort((a, b) => {
+      if (sort === "name") {
+        return order === "asc" 
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      } else {
+        return order === "asc"
+          ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+
+    setFilteredUsers(filtered);
+  }, []);
+
+  const debouncedSearch = useCallback(
+    debounce((query: string) => {
+      applyFilters(users, query, selectedRole, sortBy, sortOrder);
+    }, 300),
+    [users, selectedRole, sortBy, sortOrder]
+  );
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    debouncedSearch(searchQuery);
+  }, [searchQuery, debouncedSearch]);
+
+  useEffect(() => {
+    applyFilters(users, searchQuery, selectedRole, sortBy, sortOrder);
+  }, [selectedRole, sortBy, sortOrder]);
+
+  const renderUserItem = ({ item }: { item: User }) => (
+    <TouchableOpacity
+      style={styles.userCard}
+      onPress={() => {
+        const id = item.id.toString();
+        router.push({
+          pathname: "/editprofile/[id]",
+          params: { id }
+        });
+      }}
+    >
       <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.name}</Text>
-        <Text style={styles.userEmail}>{item.email}</Text>
-        <View style={styles.roleBadge}>
-          <Text style={styles.roleText}>{item.role?.nombre || "Sin rol"}</Text>
+        <View style={styles.userHeader}>
+          <Text style={styles.userName}>{item.name}</Text>
+          <View style={[
+            styles.roleBadge,
+            { backgroundColor: item.role?.nombre === "admin" ? "#FED7D7" : "#C6F6D5" }
+          ]}>
+            <Text style={[
+              styles.roleText,
+              { color: item.role?.nombre === "admin" ? "#9B2C2C" : "#276749" }
+            ]}>
+              {item.role?.nombre || "Sin rol"}
+            </Text>
+          </View>
         </View>
+        <Text style={styles.userEmail}>{item.email}</Text>
+        {item.telefono && (
+          <Text style={styles.userPhone}>
+            <Ionicons name="call-outline" size={14} color="#718096" /> {item.telefono}
+          </Text>
+        )}
       </View>
-      <TouchableOpacity
-        style={styles.editButton}
-        onPress={() => {
-          setSelectedUser(item);
-          setSelectedRole(item.role?.nombre || "");
-          setModalVisible(true);
-        }}
-      >
-        <Ionicons name="create-outline" size={24} color="#6B46C1" />
-      </TouchableOpacity>
-    </View>
+      <Ionicons name="chevron-forward" size={24} color="#A0AEC0" />
+    </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
-      {loading ? (
-        <ActivityIndicator size="large" color="#6B46C1" style={styles.loader} />
-      ) : (
-        <FlatList
-          data={users}
-          renderItem={renderUser}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-        />
-      )}
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Usuarios</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => router.push("/create-account")}
+        >
+          <Ionicons name="add" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
 
-      <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Cambiar Rol</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#4A5568" />
-              </TouchableOpacity>
-            </View>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Ionicons name="search-outline" size={20} color="#718096" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar usuarios..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#718096"
+          />
+          {searchQuery !== "" && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#718096" />
+            </TouchableOpacity>
+          )}
+        </View>
 
-            <Text style={styles.modalSubtitle}>Usuario: {selectedUser?.name}</Text>
-
-            <View style={styles.roleOptions}>
-              {roles.map((role) => (
+        <View style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>Rol:</Text>
+              {["all", "admin", "user"].map((role) => (
                 <TouchableOpacity
                   key={role}
-                  style={[styles.roleOption, selectedRole === role && styles.selectedRole]}
+                  style={[
+                    styles.filterButton,
+                    selectedRole === role && styles.filterButtonActive
+                  ]}
                   onPress={() => setSelectedRole(role)}
                 >
-                  <Text style={[styles.roleOptionText, selectedRole === role && styles.selectedRoleText]}>
-                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                  <Text style={[
+                    styles.filterButtonText,
+                    selectedRole === role && styles.filterButtonTextActive
+                  ]}>
+                    {role === "all" ? "Todos" : role}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={() => selectedUser && handleRoleUpdate(selectedUser.id, selectedRole)}
-            >
-              <Text style={styles.saveButtonText}>Guardar Cambios</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>Ordenar por:</Text>
+              <TouchableOpacity
+                style={[
+                  styles.filterButton,
+                  sortBy === "name" && styles.filterButtonActive
+                ]}
+                onPress={() => {
+                  if (sortBy === "name") {
+                    setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                  } else {
+                    setSortBy("name");
+                    setSortOrder("asc");
+                  }
+                }}
+              >
+                <Text style={[
+                  styles.filterButtonText,
+                  sortBy === "name" && styles.filterButtonTextActive
+                ]}>
+                  Nombre {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterButton,
+                  sortBy === "date" && styles.filterButtonActive
+                ]}
+                onPress={() => {
+                  if (sortBy === "date") {
+                    setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                  } else {
+                    setSortBy("date");
+                    setSortOrder("desc");
+                  }
+                }}
+              >
+                <Text style={[
+                  styles.filterButtonText,
+                  sortBy === "date" && styles.filterButtonTextActive
+                ]}>
+                  Fecha {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
-      </Modal>
-    </View>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#6B46C1" style={styles.loader} />
+      ) : (
+        <FlatList
+          data={filteredUsers}
+          renderItem={renderUserItem}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContainer}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="search" size={48} color="#A0AEC0" />
+              <Text style={styles.emptyText}>No se encontraron usuarios</Text>
+            </View>
+          }
+        />
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF5FF",
+    backgroundColor: "#F7FAFC",
   },
-  loader: {
-    flex: 1,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#2D3748",
+  },
+  addButton: {
+    backgroundColor: "#6B46C1",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+  },
+  searchContainer: {
+    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  searchInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7FAFC",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    marginLeft: 8,
+    fontSize: 16,
+    color: "#2D3748",
+  },
+  clearButton: {
+    padding: 4,
+  },
+  filterContainer: {
+    marginTop: 12,
+  },
+  filterGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  filterLabel: {
+    fontSize: 14,
+    color: "#4A5568",
+    marginRight: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#EDF2F7",
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: "#6B46C1",
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: "#4A5568",
+  },
+  filterButtonTextActive: {
+    color: "#FFFFFF",
   },
   listContainer: {
     padding: 16,
   },
   userCard: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
     alignItems: "center",
-    shadowColor: "#6B46C1",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 2,
   },
   userInfo: {
     flex: 1,
   },
+  userHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   userName: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
     color: "#2D3748",
+    marginRight: 8,
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleText: {
+    fontSize: 12,
+    fontWeight: "500",
   },
   userEmail: {
     fontSize: 14,
     color: "#718096",
-    marginTop: 4,
+    marginBottom: 4,
   },
-  roleBadge: {
-    backgroundColor: "#F3E8FF",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-    marginTop: 8,
+  userPhone: {
+    fontSize: 14,
+    color: "#718096",
   },
-  roleText: {
-    color: "#6B46C1",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  editButton: {
-    padding: 8,
-  },
-  modalOverlay: {
+  loader: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2D3748",
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 32,
   },
-  closeButton: {
-    padding: 4,
-  },
-  modalSubtitle: {
+  emptyText: {
     fontSize: 16,
     color: "#718096",
-    marginBottom: 20,
-  },
-  roleOptions: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  roleOption: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: "#F3E8FF",
-  },
-  selectedRole: {
-    backgroundColor: "#6B46C1",
-  },
-  roleOptionText: {
-    color: "#6B46C1",
-    fontSize: 16,
-    textAlign: "center",
-    fontWeight: "500",
-  },
-  selectedRoleText: {
-    color: "#FFFFFF",
-  },
-  saveButton: {
-    backgroundColor: "#6B46C1",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
+    marginTop: 8,
   },
 });
