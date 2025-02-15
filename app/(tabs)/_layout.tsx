@@ -1,8 +1,10 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router"; // ✅ Importamos useRouter
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native";
 
 export default function Layout() {
+  const router = useRouter(); // ✅ Usamos router para manejar la navegación
+
   return (
     <Tabs>
       <Tabs.Screen
@@ -24,12 +26,10 @@ export default function Layout() {
         options={{
           title: "Citas",
           tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
-          headerRight: () => (
+          headerRight: () => ( // ✅ Eliminamos `navigation` y usamos `router.push`
             <TouchableOpacity
               style={{ marginRight: 15 }}
-              onPress={() => {
-                // Aquí manejaremos la apertura del modal
-              }}
+              onPress={() => router.push("/listappointments")} // ✅ Ahora funciona sin errores
             >
               <Ionicons name="list" size={24} color="#6B46C1" />
             </TouchableOpacity>
@@ -39,7 +39,7 @@ export default function Layout() {
       <Tabs.Screen
         name="listappointments"
         options={{
-          href: null, // Esto oculta la tab
+          href: null, // ✅ Oculta la tab sin dañar el diseño
         }}
       />
       <Tabs.Screen

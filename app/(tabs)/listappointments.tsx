@@ -1,42 +1,128 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
-  View, Text, FlatList, StyleSheet, ActivityIndicator, Alert, SafeAreaView, TouchableOpacity 
+  View, Text, FlatList, StyleSheet, ActivityIndicator, Alert, SafeAreaView, TouchableOpacity, RefreshControl 
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "expo-router";
+import { useNavigation, useFocusEffect } from "expo-router";
 import API_URL from "../../src/constants/config";
 
 const ListAppointmentsScreen = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const navigation = useNavigation();
 
-  useEffect(() => {
-    fetchAppointments();
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserDataAndAppointments();
+    }, [])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchUserDataAndAppointments().finally(() => setRefreshing(false));
   }, []);
 
-  const fetchAppointments = async () => {
+  const fetchUserDataAndAppointments = async () => {
+    try {
+      const userIdString = await AsyncStorage.getItem("userId");
+      const userRoleString = await AsyncStorage.getItem("userRole");
+      
+      if (!userIdString || !userRoleString) {
+        throw new Error("No se encontró información del usuario");
+      }
+      
+      const currentUserId = Number(userIdString);
+      setUserId(currentUserId);
+      setUserRole(userRoleString);
+      
+      console.log("👤 ID del usuario actual:", currentUserId);
+      console.log("🎭 Rol del usuario:", userRoleString);
+      
+      await fetchAppointments(currentUserId, userRoleString);
+    } catch (error) {
+      console.error("❌ Error al obtener datos del usuario:", error);
+      Alert.alert("Error", "No se pudo obtener la información del usuario.");
+    }
+  };
+
+  const fetchAppointments = async (currentUserId: number, role: string) => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) throw new Error("No se encontró token");
 
+      console.log("🔍 Buscando citas para usuario ID:", currentUserId);
+
       const response = await axios.get(`${API_URL}/appointments`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        params: { 
+          clientId: currentUserId
+        }
       });
 
-      console.log("📅 Citas recibidas:", response.data); 
+      // Log detallado de todas las citas
+      console.log("📅 Datos completos de las citas:", JSON.stringify(response.data, null, 2));
 
-      // Extraer el nombre del empleado directamente
-      const formattedAppointments: Appointment[] = response.data.map((appointment: any): Appointment => ({
-        ...appointment,
-        employeeName: appointment.employee?.user?.name || appointment.employee?.name || "Sin nombre"
+      const filteredAppointments = response.data.filter((appointment: any) => {
+        // Log detallado de cada cita
+        console.log("🔍 Analizando cita:", {
+          id: appointment.id,
+          completeData: appointment,
+          keys: Object.keys(appointment)
+        });
+
+        // Intentar encontrar el ID del cliente en la estructura
+        const clientId = appointment.client_id || // Intentar con snake_case
+                        appointment.clientId ||   // Intentar con camelCase
+                        appointment.client?.id || // Intentar con objeto anidado
+                        appointment.Client?.id;   // Intentar con mayúscula inicial
+
+        console.log("👤 ID del cliente encontrado:", clientId);
+
+        return Number(clientId) === Number(currentUserId);
+      });
+
+      console.log("📊 Citas filtradas:", filteredAppointments.length);
+
+      const formattedAppointments = await Promise.all(filteredAppointments.map(async (appointment: any) => {
+        let employeeName = "Sin nombre";
+        
+        try {
+          if (appointment.employee?.id) {
+            const employeeResponse = await axios.get(
+              `${API_URL}/users/${appointment.employee.id}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (employeeResponse.data) {
+              employeeName = employeeResponse.data.name || "Sin nombre";
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error al obtener datos del empleado:", error);
+        }
+
+        return {
+          id: appointment.id,
+          date: appointment.date,
+          time: appointment.time,
+          employeeName: employeeName,
+          serviceName: appointment.service?.name || "Servicio no especificado",
+          status: appointment.status || 'pending'
+        };
       }));
 
+      console.log("✅ Citas formateadas:", formattedAppointments.length);
       setAppointments(formattedAppointments);
     } catch (error) {
       console.error("❌ Error al cargar citas:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("Detalles del error:", error.response?.data);
+      }
       Alert.alert("Error", "No se pudieron cargar las citas.");
     } finally {
       setLoading(false);
@@ -48,11 +134,16 @@ const ListAppointmentsScreen = () => {
       const token = await AsyncStorage.getItem("token");
       if (!token) throw new Error("No se encontró token");
 
+      const appointment = appointments.find(a => a.id === id);
+      if (!appointment) {
+        throw new Error("Cita no encontrada");
+      }
+
       await axios.delete(`${API_URL}/appointments/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       Alert.alert("Éxito", "Cita cancelada correctamente.");
-      fetchAppointments();
+      fetchAppointments(userId!, userRole!);
     } catch (error) {
       Alert.alert("Error", "No se pudo cancelar la cita.");
     }
@@ -70,6 +161,8 @@ const ListAppointmentsScreen = () => {
     date: string;
     time: string;
     employeeName: string;
+    status: string;
+    serviceName: string;
   }
 
   const renderAppointment = ({ item }: { item: Appointment }) => (
@@ -77,14 +170,35 @@ const ListAppointmentsScreen = () => {
       <Ionicons name="calendar-outline" size={24} color="#6B46C1" />
       <View style={styles.appointmentInfo}>
         <Text style={styles.dateText}>{item.date} - {item.time}</Text>
-        <Text style={styles.employeeText}>Empleado: {item.employeeName}</Text>
+        <Text style={styles.employeeText}>Profesional: {item.employeeName}</Text>
+        <Text style={styles.serviceText}>Servicio: {item.serviceName}</Text>
+        <Text style={[
+          styles.statusText,
+          item.status === 'pending' ? styles.pendingStatus :
+          item.status === 'confirmed' ? styles.confirmedStatus :
+          styles.cancelledStatus
+        ]}>
+          {item.status === 'pending' ? 'Pendiente' :
+           item.status === 'confirmed' ? 'Confirmada' :
+           'Cancelada'}
+        </Text>
       </View>
-      <TouchableOpacity style={styles.cancelButton} onPress={() => cancelAppointment(item.id)}>
-        <Ionicons name="close-circle" size={24} color="#E53E3E" />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.editButton} onPress={() => editAppointment(item)}>
-        <Ionicons name="create-outline" size={24} color="#3182CE" />
-      </TouchableOpacity>
+      {item.status !== 'cancelled' && (
+        <>
+          <TouchableOpacity 
+            style={styles.cancelButton} 
+            onPress={() => cancelAppointment(item.id)}
+          >
+            <Ionicons name="close-circle" size={24} color="#E53E3E" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.editButton} 
+            onPress={() => editAppointment(item)}
+          >
+            <Ionicons name="create-outline" size={24} color="#3182CE" />
+          </TouchableOpacity>
+        </>
+      )}
     </View>
   );
 
@@ -98,7 +212,19 @@ const ListAppointmentsScreen = () => {
           data={appointments}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderAppointment}
-          ListEmptyComponent={<Text style={styles.emptyText}>No tienes citas agendadas.</Text>}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#6B46C1"]}
+              tintColor="#6B46C1"
+            />
+          }
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>
+              No tienes citas agendadas.
+            </Text>
+          }
         />
       )}
     </SafeAreaView>
@@ -144,6 +270,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#4A5568",
   },
+  serviceText: {
+    fontSize: 14,
+    color: "#4A5568",
+    marginTop: 2,
+  },
   cancelButton: {
     marginLeft: 10,
   },
@@ -155,6 +286,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#718096",
     marginTop: 20,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  pendingStatus: {
+    backgroundColor: "#FEF9C3",
+    color: "#854D0E",
+  },
+  confirmedStatus: {
+    backgroundColor: "#DEF7EC",
+    color: "#03543F",
+  },
+  cancelledStatus: {
+    backgroundColor: "#FEE2E2",
+    color: "#9B1C1C",
   },
 });
 

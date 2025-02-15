@@ -12,8 +12,6 @@ interface Role {
   id: number;
   nombre: string;
   descripcion?: string;
-  creadoEn?: string;
-  deletedAt?: string;
 }
 
 interface User {
@@ -28,9 +26,9 @@ export default function AdminUsersScreen() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedRole, setSelectedRole] = useState('');
+  const [selectedRole, setSelectedRole] = useState("");
 
-  const roles = ['admin', 'employee', 'client'];
+  const roles = ["admin", "employee", "client"];
 
   useEffect(() => {
     fetchUsers();
@@ -53,36 +51,19 @@ export default function AdminUsersScreen() {
   const handleRoleUpdate = async (userId: number, newRole: string) => {
     try {
       const token = await AsyncStorage.getItem("token");
-      
-      console.log('Actualizando rol:', {
-        userId,
-        newRole,
-        url: `${API_URL}/user/${userId}/update-role`
-      });
+      console.log("Actualizando rol:", { userId, newRole });
 
       await axios.patch(
-        `${API_URL}/user/${userId}/update-role`,
+        `${API_URL}/users/${userId}/role`,
         { role: newRole },
-        { 
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          } 
-        }
+        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
       );
       Alert.alert("Éxito", "Rol actualizado correctamente");
       fetchUsers();
       setModalVisible(false);
     } catch (error: any) {
-      console.error('Error al actualizar rol:', {
-        error: error.response?.data,
-        status: error.response?.status,
-        url: error.config?.url
-      });
-      Alert.alert(
-        "Error", 
-        `No se pudo actualizar el rol: ${error.response?.data?.message || 'Error de servidor'}`
-      );
+      console.error("Error al actualizar rol:", error.response?.data || error.message);
+      Alert.alert("Error", "No se pudo actualizar el rol");
     }
   };
 
@@ -92,16 +73,14 @@ export default function AdminUsersScreen() {
         <Text style={styles.userName}>{item.name}</Text>
         <Text style={styles.userEmail}>{item.email}</Text>
         <View style={styles.roleBadge}>
-          <Text style={styles.roleText}>
-            {item.role?.nombre || 'Sin rol'}
-          </Text>
+          <Text style={styles.roleText}>{item.role?.nombre || "Sin rol"}</Text>
         </View>
       </View>
       <TouchableOpacity
         style={styles.editButton}
         onPress={() => {
           setSelectedUser(item);
-          setSelectedRole(item.role?.nombre || '');
+          setSelectedRole(item.role?.nombre || "");
           setModalVisible(true);
         }}
       >
@@ -123,42 +102,26 @@ export default function AdminUsersScreen() {
         />
       )}
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
+      <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Cambiar Rol</Text>
-              <TouchableOpacity 
-                onPress={() => setModalVisible(false)}
-                style={styles.closeButton}
-              >
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
                 <Ionicons name="close" size={24} color="#4A5568" />
               </TouchableOpacity>
             </View>
-            
-            <Text style={styles.modalSubtitle}>
-              Usuario: {selectedUser?.name}
-            </Text>
+
+            <Text style={styles.modalSubtitle}>Usuario: {selectedUser?.name}</Text>
 
             <View style={styles.roleOptions}>
               {roles.map((role) => (
                 <TouchableOpacity
                   key={role}
-                  style={[
-                    styles.roleOption,
-                    selectedRole === role && styles.selectedRole
-                  ]}
+                  style={[styles.roleOption, selectedRole === role && styles.selectedRole]}
                   onPress={() => setSelectedRole(role)}
                 >
-                  <Text style={[
-                    styles.roleOptionText,
-                    selectedRole === role && styles.selectedRoleText
-                  ]}>
+                  <Text style={[styles.roleOptionText, selectedRole === role && styles.selectedRoleText]}>
                     {role.charAt(0).toUpperCase() + role.slice(1)}
                   </Text>
                 </TouchableOpacity>
@@ -185,8 +148,8 @@ const styles = StyleSheet.create({
   },
   loader: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   listContainer: {
     padding: 16,
@@ -245,9 +208,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   modalTitle: {
@@ -295,4 +258,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-}); 
+});
