@@ -30,9 +30,33 @@ export default function LoginScreen() {
       if (response.status === 200) {
         const { token, user } = response.data;
 
-        // Guardar `token` y `userId` en AsyncStorage
+        // Verificar si el usuario tiene un cliente asociado
+        try {
+          // Intentamos crear el cliente con el mismo ID del usuario
+          const clientResponse = await axios.post(`${API_URL}/clients`, {
+            userId: user.id,
+            name: user.name
+          }, {
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          console.log("✅ Cliente creado:", clientResponse.data);
+        } catch (clientError: any) {
+          // Si el error es 409 (Conflict) significa que el cliente ya existe
+          if (clientError.response?.status !== 409) {
+            console.error("❌ Error al crear el cliente:", clientError);
+          } else {
+            console.log("ℹ️ El cliente ya existe");
+          }
+        }
+
+        // Guardar token, userId y userRole en AsyncStorage
         await AsyncStorage.setItem("token", token);
         await AsyncStorage.setItem("userId", String(user.id));
+        await AsyncStorage.setItem("userRole", user.role);
 
         console.log("🔐 Token guardado:", token);
         console.log("👤 ID Usuario guardado:", user.id);

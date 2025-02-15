@@ -79,6 +79,59 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.content}>
+        {/* Panel de Administración - Solo visible para admins */}
+        {user.role === 'admin' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Panel de Administración</Text>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push("/(admin)/Users" as any)}
+            >
+              <Ionicons name="people" size={24} color="#6B46C1" />
+              <Text style={styles.menuText}>Gestionar Usuarios</Text>
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>Asignar Roles</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#718096" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push("/(admin)/Services" as any)}
+            >
+              <Ionicons name="cut" size={24} color="#6B46C1" />
+              <Text style={styles.menuText}>Gestionar Servicios</Text>
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>Nuevo</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#718096" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push("/(admin)/Products" as any)}
+            >
+              <Ionicons name="basket" size={24} color="#6B46C1" />
+              <Text style={styles.menuText}>Gestionar Productos</Text>
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>Nuevo</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#718096" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push("/(admin)/Stats" as any)}
+            >
+              <Ionicons name="stats-chart" size={24} color="#6B46C1" />
+              <Text style={styles.menuText}>Estadísticas</Text>
+              <Ionicons name="chevron-forward" size={24} color="#718096" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Ajustes de cuenta existentes */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ajustes de Cuenta</Text>
           
@@ -91,13 +144,13 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={24} color="#718096" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => alert("Configuración de Notificaciones")}>
+          <TouchableOpacity style={styles.menuItem}>
             <Ionicons name="notifications-outline" size={24} color="#6B46C1" />
             <Text style={styles.menuText}>Notificaciones</Text>
             <Ionicons name="chevron-forward" size={24} color="#718096" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => alert("Configuración de Privacidad")}>
+          <TouchableOpacity style={styles.menuItem}>
             <Ionicons name="shield-checkmark-outline" size={24} color="#6B46C1" />
             <Text style={styles.menuText}>Privacidad</Text>
             <Ionicons name="chevron-forward" size={24} color="#718096" />
@@ -129,4 +182,16 @@ const styles = StyleSheet.create({
   menuText: { flex: 1, marginLeft: 12, fontSize: 16, color: "#4A5568" },
   logoutButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF5F5", padding: 16, borderRadius: 12, borderWidth: 1, borderColor: "#FED7D7" },
   logoutText: { marginLeft: 8, fontSize: 16, fontWeight: "600", color: "#E53E3E" },
+  badgeContainer: {
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  badgeText: {
+    color: '#6B46C1',
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });

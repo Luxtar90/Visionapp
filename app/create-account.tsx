@@ -21,13 +21,46 @@ export default function CreateAccount() {
       console.log("📡 Enviando solicitud a:", `${API_URL}/auth/register`);
       console.log("📤 Datos enviados:", { name, email, password });
 
-      const response = await axios.post(`${API_URL}/auth/register`, { name, email, password });
+      // 1. Primero registramos el usuario
+      const userResponse = await axios.post(`${API_URL}/auth/register`, { 
+        name, 
+        email, 
+        password,
+        role: 'client'
+      });
 
-      console.log("✅ Registro exitoso:", response.data);
+      console.log("✅ Usuario registrado:", userResponse.data);
 
-      if (response.status === 201) {
-        Alert.alert("Éxito", "Cuenta creada correctamente, ahora inicia sesión.");
-        router.push("/login");
+      if (userResponse.status === 201) {
+        // La respuesta viene directamente con los datos del usuario
+        const userId = userResponse.data.id;
+
+        // 3. Creamos el cliente con el mismo ID
+        try {
+          const clientResponse = await axios.post(`${API_URL}/clients`, {
+            userId: userId,
+            name: name
+          });
+
+          console.log("✅ Cliente creado:", clientResponse.data);
+
+          Alert.alert(
+            "Éxito", 
+            "Cuenta creada correctamente. Por favor inicia sesión.",
+            [
+              {
+                text: "OK",
+                onPress: () => router.push("/login")
+              }
+            ]
+          );
+        } catch (clientError) {
+          console.error("❌ Error al crear el cliente:", clientError);
+          Alert.alert(
+            "Error", 
+            "La cuenta se creó pero hubo un error al registrar el cliente. Por favor, contacta al soporte."
+          );
+        }
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -41,7 +74,11 @@ export default function CreateAccount() {
         console.error("⚠️ Error desconocido:", error);
       }
 
-      Alert.alert("Error", (error as any).response?.data?.message || "No se pudo conectar con el servidor. Revisa los logs.");
+      Alert.alert(
+        "Error", 
+        (error as any).response?.data?.message || 
+        "No se pudo crear la cuenta. Por favor, intenta de nuevo."
+      );
     }
   };
 

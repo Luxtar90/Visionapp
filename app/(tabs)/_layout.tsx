@@ -1,5 +1,6 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { TouchableOpacity } from "react-native";
 
 export default function Layout() {
   return (
@@ -19,10 +20,26 @@ export default function Layout() {
         }}
       />
       <Tabs.Screen
-        name="reservas"
+        name="Citas"
         options={{
-          title: "Reservas",
+          title: "Citas",
           tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
+          headerRight: () => (
+            <TouchableOpacity
+              style={{ marginRight: 15 }}
+              onPress={() => {
+                // Aquí manejaremos la apertura del modal
+              }}
+            >
+              <Ionicons name="list" size={24} color="#6B46C1" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="listappointments"
+        options={{
+          href: null, // Esto oculta la tab
         }}
       />
       <Tabs.Screen
