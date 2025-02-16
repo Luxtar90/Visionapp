@@ -1,23 +1,22 @@
 import { useState } from "react";
-import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, 
-  ActivityIndicator, Modal, Platform, KeyboardAvoidingView, ScrollView 
-} from "react-native";
 import { useRouter } from "expo-router";
+import { 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, 
+  ActivityIndicator, SafeAreaView, Platform, KeyboardAvoidingView,
+  ScrollView
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
-import API_URL from "../src/constants/config";
-import CustomAlert from "../src/components/CustomAlert";
+import API_URL from "../config/api";
+import CustomAlert from "../components/CustomAlert";
 
 export default function CreateAccount() {
   const router = useRouter();
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [currentField, setCurrentField] = useState<'name' | 'email' | 'password' | null>(null);
   const [alert, setAlert] = useState<{
     visible: boolean;
     title: string;
@@ -39,79 +38,62 @@ export default function CreateAccount() {
     });
   };
 
-  const openModal = (field: 'name' | 'email' | 'password') => {
-    setCurrentField(field);
-    setModalVisible(true);
-  };
-
-  const closeModal = () => {
-    setModalVisible(false);
-    setCurrentField(null);
-  };
-
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validateName = (name: string) => {
-    return name.length >= 2;
-  };
-
   const handleRegister = async () => {
-    if (!name || !email || !password) {
+    // Validaciones básicas
+    if (!email || !password || !name) {
       showAlert(
-        "Campos requeridos", 
-        "Por favor, completa todos los campos.",
+        "Campos requeridos",
+        "Por favor completa todos los campos",
         'warning'
-      );
-      return;
-    }
-
-    if (!validateName(name)) {
-      showAlert(
-        "Nombre inválido",
-        "El nombre debe tener al menos 2 caracteres",
-        'error'
-      );
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      showAlert(
-        "Correo inválido",
-        "Por favor, ingresa un correo electrónico válido",
-        'error'
-      );
-      return;
-    }
-
-    if (password.length < 6) {
-      showAlert(
-        "Contraseña inválida",
-        "La contraseña debe tener al menos 6 caracteres",
-        'error'
       );
       return;
     }
 
     setLoading(true);
     try {
-      const userResponse = await axios.post(`${API_URL}/auth/register`, { 
-        name, 
-        email, 
+      // Preparamos los datos del usuario con rol cliente
+      const userData = {
+        name,
+        email,
         password,
-        role: 'client'
+        telefono: null,
+        role: "client" // Rol cliente por defecto
+      };
+
+      console.log(" Creando usuario...");
+      console.log(" Datos del usuario a crear:", {
+        ...userData,
+        password: "***"
       });
 
-      if (userResponse.status === 201) {
-        const userId = userResponse.data.id;
+      // Creamos el usuario
+      const userResponse = await axios.post(`${API_URL}/auth/register`, userData);
+      const userId = userResponse.data.id;
+      console.log(" Usuario creado - ID:", userId);
 
+      if (userId) {
         try {
-          const clientResponse = await axios.post(`${API_URL}/clients`, {
-            userId: userId,
-            name: name
+          // Primero creamos el cliente
+          console.log(" Creando perfil de cliente...");
+          const clientData = {
+            id_user: userId,
+            nombre: name,
+            email: email,
+            telefono: null
+          };
+          console.log(" Datos del cliente a crear:", clientData);
+          
+          const clientResponse = await axios.post(`${API_URL}/clients`, clientData);
+          console.log(" Cliente creado:", clientResponse.data);
+
+          // Luego creamos la relación cliente-tienda
+          console.log(" Creando relación cliente-tienda...");
+          await axios.post(`${API_URL}/client-stores`, {
+            idCliente: userId,
+            idTienda: 1,
+            puntosAcumulados: 0
           });
+          console.log(" Relación cliente-tienda creada");
 
           showAlert(
             "¡Cuenta creada!", 
@@ -119,40 +101,37 @@ export default function CreateAccount() {
             'success'
           );
 
-          // Redirigir después de que se cierre la alerta
+          // Esperamos un momento para que el usuario pueda leer el mensaje
           setTimeout(() => {
             router.push("/login");
-          }, 1500);
-
-        } catch (clientError) {
-          console.error(" Error al crear el cliente:", clientError);
+          }, 2000);
+        } catch (error: any) {
+          console.error(" Error al configurar la cuenta:", error.response?.data || error);
+          // Aún así redirigimos al login ya que el usuario fue creado
           showAlert(
-            "Error", 
-            "La cuenta se creó pero hubo un error al registrar el cliente. Por favor, contacta al soporte.",
-            'error'
+            "Cuenta creada parcialmente",
+            "Tu cuenta fue creada pero hubo un error al configurar algunos detalles. Por favor, contacta al soporte.",
+            'warning'
           );
+          setTimeout(() => {
+            router.push("/login");
+          }, 3000);
         }
-      }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        let errorMessage = "No se pudo crear la cuenta. Por favor, intenta de nuevo.";
-        let errorTitle = "Error";
-
-        if (error.response?.status === 409) {
-          errorMessage = "El correo electrónico ya está registrado";
-          errorTitle = "Cuenta existente";
-        } else if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
-        }
-
-        showAlert(errorTitle, errorMessage, 'error');
       } else {
-        showAlert(
-          "Error", 
-          "Ocurrió un error inesperado. Por favor, intenta de nuevo más tarde.",
-          'error'
-        );
+        throw new Error("No se recibió el ID del usuario en la respuesta");
       }
+    } catch (error: any) {
+      console.error(" Error en el registro:", error);
+      console.error("Detalles del error de registro:", {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      showAlert(
+        "Error al crear cuenta",
+        error.response?.data?.message || "Hubo un error al crear tu cuenta",
+        'error'
+      );
     } finally {
       setLoading(false);
     }
@@ -168,141 +147,50 @@ export default function CreateAccount() {
           contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.content}>
-            <View style={styles.titleContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="person-add-outline" size={40} color="#6B46C1" />
-                <View style={styles.iconGlow} />
-              </View>
-              <Text style={styles.title}>Crear Cuenta</Text>
-              <Text style={styles.subtitle}>Únete a nuestra comunidad</Text>
+            <View style={styles.logoContainer}>
+              <Ionicons name="person-add-outline" size={40} color="#6B46C1" />
+              <View style={styles.logoGlow} />
             </View>
+            
+            <Text style={styles.title}>Crear Cuenta</Text>
+            <Text style={styles.subtitle}>¡Únete a nuestra comunidad!</Text>
 
             <View style={styles.form}>
-              <TouchableOpacity 
-                style={styles.inputContainer}
-                onPress={() => openModal('name')}
-              >
-                <Ionicons name="person-outline" size={24} color="#666" />
-                <Text style={[styles.input, name ? styles.filledInput : styles.placeholderText]}>
-                  {name || "Nombre completo"}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={24} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Nombre completo"
+                  value={name}
+                  onChangeText={setName}
+                  style={styles.input}
+                />
+              </View>
 
-              <TouchableOpacity 
-                style={styles.inputContainer}
-                onPress={() => openModal('email')}
-              >
-                <Ionicons name="mail-outline" size={24} color="#666" />
-                <Text style={[styles.input, email ? styles.filledInput : styles.placeholderText]}>
-                  {email || "Correo electrónico"}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={24} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Correo electrónico"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.input}
+                />
+              </View>
 
-              <TouchableOpacity 
-                style={styles.inputContainer}
-                onPress={() => openModal('password')}
-              >
-                <Ionicons name="lock-closed-outline" size={24} color="#666" />
-                <Text style={[styles.input, password ? styles.filledInput : styles.placeholderText]}>
-                  {password ? "••••••••" : "Contraseña"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[
-                  styles.registerButton,
-                  loading && styles.registerButtonDisabled,
-                  name.length > 0 && email.length > 0 && password.length > 0 && styles.registerButtonActive
-                ]} 
-                onPress={handleRegister}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons 
-                      name="checkmark-circle-outline" 
-                      size={24} 
-                      color="#FFFFFF" 
-                      style={styles.buttonIcon} 
-                    />
-                    <Text style={styles.registerButtonText}>Crear Cuenta</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.loginLink} 
-                onPress={() => router.push("/login")}
-                disabled={loading}
-              >
-                <Text style={styles.loginLinkText}>
-                  ¿Ya tienes cuenta? <Text style={styles.loginLinkTextBold}>Inicia sesión</Text>
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={closeModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {currentField === 'name' ? "Nombre completo" : 
-                 currentField === 'email' ? "Correo electrónico" : "Contraseña"}
-              </Text>
-              <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalInputContainer}>
-              <Ionicons 
-                name={
-                  currentField === 'name' ? "person-outline" :
-                  currentField === 'email' ? "mail-outline" : "lock-closed-outline"
-                } 
-                size={24} 
-                color="#6B46C1" 
-              />
-              <TextInput
-                style={styles.modalInput}
-                placeholder={
-                  currentField === 'name' ? "Nombre completo" :
-                  currentField === 'email' ? "Correo electrónico" : "Contraseña"
-                }
-                value={
-                  currentField === 'name' ? name :
-                  currentField === 'email' ? email : password
-                }
-                onChangeText={
-                  currentField === 'name' ? setName :
-                  currentField === 'email' ? setEmail : setPassword
-                }
-                keyboardType={currentField === 'email' ? "email-address" : "default"}
-                secureTextEntry={currentField === 'password' && !showPassword}
-                autoCapitalize={currentField === 'email' ? "none" : "words"}
-                autoFocus={true}
-              />
-              {currentField === 'password' && (
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={24} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Contraseña"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  style={[styles.input, styles.passwordInput]}
+                />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
-                  style={styles.modalEyeIcon}
+                  style={styles.eyeIcon}
                 >
                   <Ionicons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -310,18 +198,46 @@ export default function CreateAccount() {
                     color="#666"
                   />
                 </TouchableOpacity>
-              )}
-            </View>
+              </View>
 
-            <TouchableOpacity 
-              style={styles.modalButton}
-              onPress={closeModal}
-            >
-              <Text style={styles.modalButtonText}>Aceptar</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  loading && styles.disabledButton,
+                  (email && password && name) && styles.primaryButtonActive
+                ]}
+                onPress={handleRegister}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="person-add-outline" size={24} color="#FFFFFF" style={styles.buttonIcon} />
+                    <Text style={styles.primaryButtonText}>Crear Cuenta</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>O</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => router.push("/login")}
+                disabled={loading}
+              >
+                <Ionicons name="log-in-outline" size={24} color="#6B46C1" style={styles.buttonIcon} />
+                <Text style={styles.secondaryButtonText}>Ya tengo una cuenta</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
       <CustomAlert
         visible={alert.visible}
         title={alert.title}
@@ -336,31 +252,15 @@ export default function CreateAccount() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: "#6B46C1" 
-  },
-  header: { 
-    padding: 16 
-  },
-  backButton: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: "rgba(255, 255, 255, 0.2)", 
-    justifyContent: "center", 
-    alignItems: "center" 
+    backgroundColor: "#FAF5FF" 
   },
   content: { 
     flex: 1, 
-    backgroundColor: "#FAF5FF", 
-    borderTopLeftRadius: 30, 
-    borderTopRightRadius: 30, 
-    padding: 24 
+    padding: 24, 
+    justifyContent: "center", 
+    alignItems: "center" 
   },
-  titleContainer: { 
-    alignItems: "center",
-    marginBottom: 32 
-  },
-  iconContainer: {
+  logoContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
@@ -374,7 +274,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
   },
-  iconGlow: {
+  logoGlow: {
     position: "absolute",
     width: 100,
     height: 100,
@@ -384,21 +284,23 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.2 }],
   },
   title: { 
-    fontSize: 32, 
-    fontWeight: "bold", 
-    color: "#2D3748", 
+    fontSize: 36,
+    fontWeight: "bold",
+    color: "#2D3748",
     marginBottom: 8,
     letterSpacing: 0.5,
   },
   subtitle: { 
-    fontSize: 16, 
+    fontSize: 17,
     color: "#718096",
     letterSpacing: 0.3,
   },
   form: { 
+    width: "100%",
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
     padding: 24,
+    marginTop: 32,
     shadowColor: "#6B46C1",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
@@ -406,13 +308,13 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   inputContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    backgroundColor: "#F7FAFC", 
-    borderRadius: 12, 
-    borderWidth: 1.5, 
-    borderColor: "#E2E8F0", 
-    paddingHorizontal: 16, 
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7FAFC",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 16,
     height: 56,
     marginBottom: 16,
   },
@@ -420,9 +322,9 @@ const styles = StyleSheet.create({
     marginRight: 12 
   },
   input: { 
-    flex: 1, 
-    fontSize: 16, 
-    color: "#2D3748" 
+    flex: 1,
+    fontSize: 16,
+    color: "#2D3748",
   },
   passwordInput: {
     flex: 1,
@@ -433,13 +335,13 @@ const styles = StyleSheet.create({
     right: 10,
     padding: 5,
   },
-  registerButton: { 
+  primaryButton: { 
     flexDirection: "row",
-    backgroundColor: "#9F7AEA", 
-    height: 56, 
-    borderRadius: 12, 
-    justifyContent: "center", 
-    alignItems: "center", 
+    backgroundColor: "#9F7AEA",
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 24,
     shadowColor: "#6B46C1",
     shadowOffset: { width: 0, height: 4 },
@@ -447,12 +349,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  registerButtonActive: {
+  primaryButtonActive: {
     backgroundColor: "#6B46C1",
     shadowOpacity: 0.3,
     elevation: 6,
   },
-  registerButtonDisabled: {
+  disabledButton: {
     backgroundColor: "#E9D8FD",
     shadowOpacity: 0,
     elevation: 0,
@@ -460,82 +362,42 @@ const styles = StyleSheet.create({
   buttonIcon: {
     marginRight: 8,
   },
-  registerButtonText: { 
-    color: "#FFFFFF", 
-    fontSize: 17, 
+  primaryButtonText: { 
+    color: "#FFFFFF",
+    fontSize: 17,
     fontWeight: "600",
     letterSpacing: 0.3,
   },
-  loginLink: { 
-    alignItems: "center", 
-    marginTop: 24 
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
   },
-  loginLinkText: { 
-    color: "#718096", 
-    fontSize: 15 
-  },
-  loginLinkTextBold: { 
-    color: "#6B46C1", 
-    fontWeight: "600" 
-  },
-  modalOverlay: {
+  dividerLine: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    height: 1,
+    backgroundColor: "#E2E8F0",
   },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    minHeight: 300,
+  dividerText: {
+    color: "#718096",
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontWeight: "500",
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2D3748',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  modalInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F7FAFC',
+  secondaryButton: { 
+    flexDirection: "row",
+    height: 56,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#E9D8FD",
+    backgroundColor: "#FAF5FF",
   },
-  modalInput: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#2D3748',
-  },
-  modalEyeIcon: {
-    padding: 5,
-  },
-  modalButton: {
-    backgroundColor: '#6B46C1',
-    borderRadius: 12,
-    padding: 15,
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  placeholderText: {
-    color: '#718096',
-  },
-  filledInput: {
-    color: '#2D3748',
-  },
+  secondaryButtonText: { 
+    color: "#6B46C1",
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  }
 });

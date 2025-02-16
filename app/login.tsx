@@ -7,8 +7,29 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../src/constants/config";
-import CustomAlert from "../src/components/CustomAlert";
+import API_URL from "../config/api";
+import CustomAlert from "../components/CustomAlert";
+
+interface Store {
+  id: number;
+  nombre: string;
+  direccion: string;
+  numero_celular: string;
+  email: string;
+  puntos_acumulados: number;
+  ultima_visita: string;
+}
+
+interface LoginResponse {
+  token: string;
+  user: {
+    id: number;
+    email: string;
+    nombre: string;
+  };
+  client_id?: number;
+  tiendas?: Store[];
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -57,7 +78,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!email || !password) {
       showAlert(
-        "Campos requeridos",
+        "Campos requeridos", 
         "Por favor, ingresa tu correo y contraseña",
         'warning'
       );
@@ -75,91 +96,103 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      console.log(" Enviando solicitud a:", `${API_URL}/auth/login`);
-      console.log(" Datos enviados:", { email, password });
+      console.log("📝 Intentando iniciar sesión...");
+      
+      const response = await axios.post<LoginResponse>(`${API_URL}/auth/login`, {
+        email,
+        password,
+      });
 
-      const response = await axios.post(`${API_URL}/auth/login`, { email, password });
+      console.log("✅ Inicio de sesión exitoso");
 
-      console.log(" Respuesta del servidor:", response.data);
+      // Guardar token y datos del usuario
+      await AsyncStorage.setItem('token', response.data.token);
+      await AsyncStorage.setItem('userId', response.data.user.id.toString());
+      
+      console.log("✅ Datos del usuario recibidos:", response.data);
+      console.log("📡 Enviando solicitud a:", `${API_URL}/users/${response.data.user.id}`);
 
-      if (response.status === 200) {
-        const { token, user } = response.data;
+      // Obtener datos adicionales del usuario
+      const userResponse = await axios.get(`${API_URL}/users/${response.data.user.id}`, {
+        headers: {
+          Authorization: `Bearer ${response.data.token}`,
+        },
+      });
 
-        try {
-          const clientResponse = await axios.post(`${API_URL}/clients`, {
-            userId: user.id,
-            name: user.name
-          }, {
-            headers: { 
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
+      console.log("✅ Datos del usuario recibidos:", userResponse.data);
 
-          console.log(" Cliente creado:", clientResponse.data);
-          showAlert("¡Éxito!", "Perfil de cliente creado exitosamente", 'success');
-        } catch (clientError: any) {
-          if (clientError.response?.status !== 409) {
-            console.error(" Error al crear el cliente:", clientError);
-            showAlert(
-              "Error de registro",
-              "No se pudo crear el perfil de cliente",
-              'error'
-            );
-          } else {
-            console.log(" El cliente ya existe");
-          }
+      // Si es un cliente, obtenemos las tiendas asociadas
+      console.log("📝 Obteniendo tiendas asociadas...");
+      const storesResponse = await axios.get(
+        `${API_URL}/client-stores/client/${response.data.user.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${response.data.token}`,
+          },
         }
+      );
 
-        await AsyncStorage.setItem("token", token);
-        await AsyncStorage.setItem("userId", String(user.id));
-        await AsyncStorage.setItem("userRole", user.role);
+      console.log("✅ Tiendas obtenidas:", storesResponse.data);
 
-        console.log(" Token guardado:", token);
-        console.log(" ID Usuario guardado:", user.id);
-
+      if (!storesResponse.data || storesResponse.data.length === 0) {
+        console.log("⚠️ No se encontraron tiendas para este usuario");
         showAlert(
-          "¡Bienvenido!",
-          `${user.name ? user.name : 'Usuario'}`,
-          'success'
+          "Sin tiendas asignadas",
+          "No tienes tiendas asignadas a tu cuenta",
+          'warning'
         );
-        
-        // Redirigir después de que se cierre la alerta
-        setTimeout(() => {
-          router.push("/(tabs)/search");
-        }, 1500);
+        return;
       }
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        console.error(" Error en la petición Axios:");
-        console.error(" URL:", error.config?.url);
-        console.error(" Método:", error.config?.method);
-        console.error(" Datos enviados:", error.config?.data);
-        console.error(" Código de error:", error.response?.status || "No disponible");
-        console.error(" Mensaje del servidor:", error.response?.data || "No disponible");
 
-        let errorMessage = "No se pudo conectar con el servidor";
-        let errorTitle = "Error de conexión";
+      // Extraemos las tiendas de la respuesta
+      const firstClientStore = storesResponse.data[0];
+      const firstStore = firstClientStore.store;
 
-        if (error.response?.status === 401) {
-          errorMessage = "Correo o contraseña incorrectos";
-          errorTitle = "Error de autenticación";
-        } else if (error.response?.status === 404) {
-          errorMessage = "Usuario no encontrado";
-          errorTitle = "Error de autenticación";
-        } else if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
-        }
+      console.log("📝 Primera tienda encontrada:", firstStore);
 
-        showAlert(errorTitle, errorMessage, 'error');
-      } else {
-        console.error(" Error desconocido:", error);
+      if (!firstStore || !firstStore.id) {
+        console.error("❌ Error: La tienda no tiene un ID válido");
         showAlert(
           "Error",
-          "Ocurrió un error inesperado. Por favor, intenta de nuevo más tarde.",
+          "Error al obtener los datos de la tienda",
           'error'
         );
+        return;
       }
+
+      // Guardamos la primera tienda como actual
+      await AsyncStorage.setItem("currentStoreId", firstStore.id.toString());
+      await AsyncStorage.setItem("currentStoreName", firstStore.name);
+
+      console.log("✅ Tienda actual guardada:", {
+        id: firstStore.id,
+        name: firstStore.name
+      });
+
+      showAlert(
+        "¡Bienvenido!",
+        "Has iniciado sesión correctamente",
+        'success'
+      );
+
+      // Redirigimos a la pantalla principal
+      setTimeout(() => {
+        router.replace("/(tabs)/profile");
+      }, 1000);
+
+    } catch (error: any) {
+      console.error("❌ Error en el inicio de sesión:", error);
+      console.error("Detalles del error:", {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      });
+
+      showAlert(
+        "Error de inicio de sesión",
+        error.response?.data?.message || "Credenciales incorrectas",
+        'error'
+      );
     } finally {
       setLoading(false);
     }

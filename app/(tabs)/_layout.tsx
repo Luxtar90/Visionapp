@@ -1,9 +1,9 @@
-import { Tabs, useRouter } from "expo-router";
+import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { TouchableOpacity, Platform, Animated, View } from "react-native";
-import { useCallback, useRef, useEffect } from "react";
+import { Platform, Animated, View } from "react-native";
+import { useCallback, useRef } from "react";
 
-type IconName = "search" | "compass" | "calendar" | "person";
+type IconName = "home" | "calendar" | "person";
 
 interface CustomTabBarIconProps {
   name: IconName;
@@ -12,47 +12,12 @@ interface CustomTabBarIconProps {
   focused: boolean;
 }
 
-export default function Layout() {
-  const router = useRouter();
+export default function TabsLayout() {
   const tabBarHeight = Platform.OS === 'ios' ? 85 : 65;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  const animateTabPress = useCallback((callback?: () => void) => {
-    Animated.parallel([
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 0.95,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.sequence([
-        Animated.timing(fadeAnim, {
-          toValue: 0.7,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start(callback);
-  }, [scaleAnim, fadeAnim]);
-
-  const handleListPress = useCallback(() => {
-    animateTabPress(() => router.push("/listappointments"));
-  }, [router, animateTabPress]);
-
   const CustomTabBarIcon = useCallback(({ name, color, size, focused }: CustomTabBarIconProps) => {
-    const iconName = focused ? name : `${name}-outline` as const;
     return (
       <Animated.View
         style={{
@@ -62,7 +27,7 @@ export default function Layout() {
         }}
       >
         <Ionicons 
-          name={iconName}
+          name={focused ? name : `${name}-outline`}
           size={size} 
           color={color}
         />
@@ -72,7 +37,7 @@ export default function Layout() {
               width: 4,
               height: 4,
               borderRadius: 2,
-              backgroundColor: '#6B46C1',
+              backgroundColor: '#FFD700',
               marginTop: 4,
             }} 
           />
@@ -97,7 +62,7 @@ export default function Layout() {
           shadowOpacity: 0.1,
           shadowRadius: 3,
         },
-        tabBarActiveTintColor: '#6B46C1',
+        tabBarActiveTintColor: '#FFD700',
         tabBarInactiveTintColor: '#718096',
         tabBarLabelStyle: {
           fontSize: 12,
@@ -125,33 +90,18 @@ export default function Layout() {
       }}
     >
       <Tabs.Screen
-        name="search"
+        name="shop"
         options={{
-          title: "Buscar",
+          title: "Inicio",
           tabBarIcon: ({ color, size, focused }) => (
             <CustomTabBarIcon 
-              name="search"
+              name="home"
               color={color}
               size={size}
               focused={focused}
             />
           ),
-          tabBarAccessibilityLabel: "Buscar servicios y productos",
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: "Explorar",
-          tabBarIcon: ({ color, size, focused }) => (
-            <CustomTabBarIcon 
-              name="compass"
-              color={color}
-              size={size}
-              focused={focused}
-            />
-          ),
-          tabBarAccessibilityLabel: "Explorar servicios disponibles",
+          tabBarAccessibilityLabel: "Inicio",
         }}
       />
       <Tabs.Screen

@@ -7,7 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useFocusEffect } from "expo-router";
-import API_URL from "../../src/constants/config";
+import API_URL from "../config/api";
 
 const ListAppointmentsScreen = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -61,35 +61,24 @@ const ListAppointmentsScreen = () => {
       console.log("🔍 Buscando citas para usuario ID:", currentUserId);
 
       const response = await axios.get(`${API_URL}/appointments`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { 
-          clientId: currentUserId
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Log detallado de todas las citas
       console.log("📅 Datos completos de las citas:", JSON.stringify(response.data, null, 2));
 
+      // Filtrar las citas donde el id_user del cliente coincide con el usuario actual
       const filteredAppointments = response.data.filter((appointment: any) => {
-        // Log detallado de cada cita
+        const clientUserId = appointment.client?.id_user;
         console.log("🔍 Analizando cita:", {
-          id: appointment.id,
-          completeData: appointment,
-          keys: Object.keys(appointment)
+          appointmentId: appointment.id,
+          clientUserId,
+          currentUserId,
+          matches: Number(clientUserId) === Number(currentUserId)
         });
-
-        // Intentar encontrar el ID del cliente en la estructura
-        const clientId = appointment.client_id || // Intentar con snake_case
-                        appointment.clientId ||   // Intentar con camelCase
-                        appointment.client?.id || // Intentar con objeto anidado
-                        appointment.Client?.id;   // Intentar con mayúscula inicial
-
-        console.log("👤 ID del cliente encontrado:", clientId);
-
-        return Number(clientId) === Number(currentUserId);
+        return Number(clientUserId) === Number(currentUserId);
       });
 
-      console.log("📊 Citas filtradas:", filteredAppointments.length);
+      console.log("📊 Citas filtradas para el usuario:", filteredAppointments.length);
 
       const formattedAppointments = await Promise.all(filteredAppointments.map(async (appointment: any) => {
         let employeeName = "Sin nombre";
@@ -111,11 +100,13 @@ const ListAppointmentsScreen = () => {
 
         return {
           id: appointment.id,
-          date: appointment.date,
+          date: new Date(appointment.date).toISOString(),
           time: appointment.time,
           employeeName: employeeName,
           serviceName: appointment.service?.name || "Servicio no especificado",
-          status: appointment.status || 'pending'
+          status: appointment.status || 'pending',
+          employeeId: appointment.employee?.id,
+          serviceId: appointment.service?.id
         };
       }));
 
@@ -164,9 +155,30 @@ const ListAppointmentsScreen = () => {
     date: string;
     time: string;
     employeeName: string;
-    status: string;
+    employeeId: number;
+    status: 'pending' | 'confirmed' | 'cancelled';
     serviceName: string;
+    serviceId: number;
   }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (timeString: string) => {
+    // Convertir el formato 24h a 12h
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+  };
 
   const handleAppointmentPress = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
@@ -186,7 +198,12 @@ const ListAppointmentsScreen = () => {
     >
       <Ionicons name="calendar-outline" size={24} color="#6B46C1" />
       <View style={styles.appointmentInfo}>
-        <Text style={styles.dateText}>{item.date} - {item.time}</Text>
+        <Text style={styles.dateText}>
+          {formatDate(item.date)}
+        </Text>
+        <Text style={styles.timeText}>
+          {formatTime(item.time)}
+        </Text>
         <Text style={styles.employeeText}>Profesional: {item.employeeName}</Text>
         <Text style={styles.serviceText}>Servicio: {item.serviceName}</Text>
         <Text style={[
@@ -262,7 +279,7 @@ const ListAppointmentsScreen = () => {
                         <Ionicons name="calendar" size={24} color="#6B46C1" />
                         <Text style={styles.modalLabel}>Fecha y Hora:</Text>
                         <Text style={styles.modalText}>
-                          {selectedAppointment.date} - {selectedAppointment.time}
+                          {formatDate(selectedAppointment.date)} - {formatTime(selectedAppointment.time)}
                         </Text>
                       </View>
 
@@ -369,6 +386,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1A202C",
     marginBottom: 4,
+  },
+  timeText: {
+    fontSize: 15,
+    color: "#4A5568",
+    marginBottom: 6,
+    fontWeight: "500",
   },
   employeeText: {
     fontSize: 15,

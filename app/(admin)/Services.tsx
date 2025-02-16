@@ -6,7 +6,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../../src/constants/config";
+import API_URL from '../../config/api';
 
 interface Service {
   id: number;

@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../../src/constants/config";
+import API_URL from "../../config/api";
 import debounce from 'lodash/debounce';
 
 interface User {
@@ -132,7 +132,7 @@ export default function AdminUsersScreen() {
       onPress={() => {
         const id = item.id.toString();
         router.push({
-          pathname: "/editprofile/[id]",
+          pathname: "/edit/[id]",
           params: { id }
         });
       }}

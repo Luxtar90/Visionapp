@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
 import { 
-  View, Text, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, SafeAreaView, ScrollView 
+  View, Text, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator, SafeAreaView, ScrollView, Modal, Platform 
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../../src/constants/config";
+import { useNavigation } from "expo-router";
+import API_URL from '../../config/api';
+import { useState, useEffect, SetStateAction } from "react";
 import { useAlert } from '../../hooks/useAlert';
 
 const CitasScreen = () => {
@@ -20,6 +21,13 @@ const CitasScreen = () => {
   const [loadingHours, setLoadingHours] = useState<boolean>(false);
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(false);
   const [savingReservation, setSavingReservation] = useState<boolean>(false);
+  const [userAppointments, setUserAppointments] = useState<any[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState<boolean>(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [employeesData, setEmployeesData] = useState<{ [key: string]: any }>({});
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [showCanceledAppointments, setShowCanceledAppointments] = useState(true);
 
   useEffect(() => {
     fetchEmployees();
@@ -58,15 +66,26 @@ const CitasScreen = () => {
     const fetchUserId = async () => {
       try {
         const userIdString = await AsyncStorage.getItem("userId");
+        const clientIdString = await AsyncStorage.getItem("clientId");
+        
         if (!userIdString) {
           console.error("❌ No se encontró el ID del usuario logueado");
           showError("No se encontró el ID del usuario", "Error de sesión");
           return;
         }
-        setClientId(Number(userIdString));
-        console.log("✅ ID del usuario logueado:", Number(userIdString));
+
+        // Usamos el mismo ID para usuario y cliente
+        const id = Number(userIdString);
+        setClientId(id);
+        console.log("✅ ID del usuario/cliente logueado:", id);
+
+        // Si no existe el clientId en AsyncStorage, lo guardamos
+        if (!clientIdString) {
+          await AsyncStorage.setItem("clientId", id.toString());
+          console.log("✅ ID de cliente guardado en AsyncStorage");
+        }
       } catch (error) {
-        console.error("❌ Error al obtener el ID del usuario logueado:", error);
+        console.error("❌ Error al obtener el ID del usuario/cliente:", error);
         showError("Error al obtener información del usuario", "Error de sesión");
       }
     };
@@ -75,13 +94,67 @@ const CitasScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedDate && selectedEmployee) {
-      fetchAvailableHours(selectedDate, selectedEmployee);
-    } else {
-      setAvailableHours([]);
-      setReservedHours([]);
+    if (clientId) {
+      fetchUserAppointments();
     }
-  }, [selectedDate, selectedEmployee]);
+  }, [clientId]);
+
+  useEffect(() => {
+    if (modalVisible) {
+      fetchUserAppointments();
+    }
+  }, [modalVisible]);
+
+  const fetchUserAppointments = async () => {
+    if (!clientId) return;
+    
+    setLoadingAppointments(true);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) throw new Error("No se encontró el token");
+
+      console.log("🔍 Obteniendo citas del usuario...");
+      const response = await axios.get(`${API_URL}/appointments`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!Array.isArray(response.data)) {
+        console.error("❌ La respuesta no es un array:", response.data);
+        return;
+      }
+
+      // Filtrar las citas del usuario actual
+      const filteredAppointments = response.data.filter((appointment: any) => {
+        const clientUserId = appointment.client?.id_user;
+        return Number(clientUserId) === Number(clientId);
+      });
+
+      // Ordenar las citas por fecha y hora
+      const sortedAppointments = filteredAppointments.sort((a: any, b: any) => {
+        const dateA = new Date(`${a.date}T${a.time}`);
+        const dateB = new Date(`${b.date}T${b.time}`);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      setUserAppointments(sortedAppointments);
+
+      // Obtener datos de empleados para todas las citas
+      const employeeIds = new Set(sortedAppointments.map(app => app.employee?.id).filter(Boolean));
+      console.log("🔍 IDs de empleados a buscar:", Array.from(employeeIds));
+
+      const employeePromises = Array.from(employeeIds).map(id => fetchEmployeeData(id));
+      await Promise.all(employeePromises);
+
+    } catch (error: any) {
+      console.error("❌ Error al obtener las citas:", error);
+      showError(
+        "No se pudieron cargar tus citas",
+        "Error de conexión"
+      );
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
 
   const fetchAvailableHours = async (date: string, employeeId: number) => {
     setLoadingHours(true);
@@ -96,7 +169,16 @@ const CitasScreen = () => {
       if (Array.isArray(response.data)) {
         console.log("✅ Horas disponibles:", response.data);
         setAvailableHours(response.data);
-        setReservedHours([]);
+        
+        // Filtramos las citas del usuario para esta fecha y empleado
+        const reservedForDate = userAppointments
+          .filter(app => 
+            app.date === date && 
+            app.employeeId === employeeId
+          )
+          .map(app => app.time);
+        
+        setReservedHours(reservedForDate);
       } 
       else if (response.data?.availableSlots && response.data?.reservedSlots) {
         console.log("✅ Horas disponibles:", response.data.availableSlots);
@@ -130,17 +212,14 @@ const CitasScreen = () => {
     setSavingReservation(true);
     try {
       const token = await AsyncStorage.getItem("token");
-      const userIdString = await AsyncStorage.getItem("userId");
       
-      if (!token || !userIdString) {
-        throw new Error("No se encontró token o userId");
+      if (!token || !clientId) {
+        throw new Error("No se encontró token o clientId");
       }
-
-      const userId = Number(userIdString);
       
       const reservationData = {
         employeeId: selectedEmployee,
-        clientId: Number(userId),
+        clientId: clientId, // Usamos el clientId que ya tenemos en el estado
         date: selectedDate,
         time: selectedHour,
         status: "pending",
@@ -191,12 +270,1017 @@ const CitasScreen = () => {
     }
   };
 
+  const fetchEmployeeData = async (employeeId: number) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        console.error('❌ No se encontró token para obtener datos del empleado');
+        return null;
+      }
+
+      console.log(`🔍 Obteniendo datos del empleado ${employeeId}...`);
+      const response = await axios.get(`${API_URL}/employees/${employeeId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data) {
+        const employeeData = {
+          ...response.data,
+          name: response.data.user?.name || response.data.name || "Sin nombre"
+        };
+        setEmployeesData(prev => ({
+          ...prev,
+          [employeeId]: employeeData
+        }));
+        return employeeData;
+      }
+    } catch (error) {
+      console.error(`❌ Error al obtener datos del empleado ${employeeId}:`, error);
+    }
+    return null;
+  };
+
+  const getEmployeeName = (employeeId: number) => {
+    if (employeesData[employeeId]) {
+      return employeesData[employeeId].name;
+    }
+    // Si no tenemos los datos del empleado, los obtenemos
+    fetchEmployeeData(employeeId);
+    return "Cargando...";
+  };
+
+  const handleAppointmentPress = (appointment: any) => {
+    // Aquí puedes implementar la lógica cuando se presiona una cita
+    console.log('Cita seleccionada:', appointment);
+  };
+
+  const handleCancelAppointment = async (appointmentId: number) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) throw new Error("No se encontró el token");
+
+      console.log("🗑️ Cancelando cita:", appointmentId);
+      const response = await axios.put(
+        `${API_URL}/appointments/${appointmentId}`,
+        { status: "cancelled" },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.status === 200) {
+        showSuccess("La cita ha sido cancelada", "Cita cancelada");
+        fetchUserAppointments(); // Recargar las citas
+      }
+    } catch (error) {
+      console.error("❌ Error al cancelar la cita:", error);
+      showError(
+        "No se pudo cancelar la cita",
+        "Por favor, intenta de nuevo más tarde"
+      );
+    }
+  };
+
+  const handleEditAppointment = (appointment: any) => {
+    setSelectedAppointment(appointment);
+    setSelectedDate(appointment.date);
+    setSelectedEmployee(appointment.employee?.id);
+    setSelectedHour(appointment.time);
+    setIsEditModalVisible(true);
+  };
+
+  const handleEmployeeSelect = (employeeId: number) => {
+    console.log("🔄 Cambiando empleado seleccionado:", {
+      empleadoAnterior: selectedEmployee,
+      nuevoEmpleado: employeeId
+    });
+    
+    setSelectedEmployee(employeeId);
+    setSelectedHour(null);
+    
+    if (selectedDate) {
+      console.log("📅 Buscando disponibilidad para nuevo empleado:", {
+        empleadoId: employeeId,
+        fecha: selectedDate
+      });
+      fetchAvailableHours(selectedDate, employeeId);
+    }
+  };
+
+  const handleUpdateAppointment = async () => {
+    if (!selectedAppointment || !selectedDate || !selectedHour || !selectedEmployee) {
+      showInfo("Seleccione fecha, hora y empleado", "Datos incompletos");
+      return;
+    }
+
+    setSavingReservation(true);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) throw new Error("No se encontró el token");
+
+      // Estructura completa que coincide con la respuesta del servidor
+      const updateData = {
+        id: selectedAppointment.id,
+        client: {
+          id_user: selectedAppointment.client?.id_user,
+          createdAt: selectedAppointment.client?.createdAt
+        },
+        clientId: selectedAppointment.client?.id_user,
+        employee: {
+          id: Number(selectedEmployee)
+        },
+        employeeId: Number(selectedEmployee),
+        service: selectedAppointment.service,
+        serviceId: selectedAppointment.service?.id,
+        date: selectedDate,
+        time: selectedHour,
+        status: "pending",
+        shiftAssigned: false
+      };
+
+      console.log("✏️ Datos de actualización de cita:", {
+        citaId: selectedAppointment.id,
+        datosAnteriores: {
+          empleadoId: selectedAppointment.employee?.id,
+          fecha: selectedAppointment.date,
+          hora: selectedAppointment.time
+        },
+        nuevosData: updateData
+      });
+
+      // Verificar disponibilidad primero
+      const availabilityCheck = await axios.get(`${API_URL}/availability`, {
+        params: { 
+          date: selectedDate, 
+          employeeId: selectedEmployee 
+        },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!availabilityCheck.data.includes(selectedHour)) {
+        throw new Error("El horario seleccionado ya no está disponible");
+      }
+
+      // Realizar la actualización usando PUT con la estructura completa
+      const response = await axios.put(
+        `${API_URL}/appointments/${selectedAppointment.id}`,
+        updateData,
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log("✅ Respuesta del servidor al actualizar:", {
+        status: response.status,
+        data: response.data
+      });
+
+      if (response.status === 200) {
+        // Verificar el estado final de la cita
+        const verificationResponse = await axios.get(
+          `${API_URL}/appointments/${selectedAppointment.id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const updatedEmployeeId = verificationResponse.data.employee?.id;
+        const employeeUpdatedSuccessfully = Number(updatedEmployeeId) === Number(selectedEmployee);
+
+        console.log("🔍 Verificación final de la cita:", {
+          appointmentId: selectedAppointment.id,
+          empleadoActual: updatedEmployeeId,
+          empleadoEsperado: selectedEmployee,
+          actualizado: employeeUpdatedSuccessfully
+        });
+
+        if (employeeUpdatedSuccessfully) {
+          showSuccess("La cita ha sido actualizada correctamente", "Cambios guardados");
+        } else {
+          console.error("❌ La actualización del empleado no se reflejó correctamente:", {
+            esperado: selectedEmployee,
+            actual: updatedEmployeeId,
+            respuestaOriginal: response.data
+          });
+          
+          showError(
+            "La cita se actualizó pero hubo un problema con el cambio de empleado",
+            "Actualización parcial"
+          );
+        }
+
+        setIsEditModalVisible(false);
+        await fetchUserAppointments();
+      }
+    } catch (error: any) {
+      console.error("❌ Error al actualizar la cita:", error);
+      console.error("❌ Detalles del error:", {
+        status: error.response?.status,
+        mensaje: error.response?.data?.message,
+        data: error.response?.data
+      });
+      
+      let errorMessage = "No se pudo actualizar la cita. Por favor, intenta de nuevo más tarde.";
+      
+      if (error.response?.status === 404) {
+        errorMessage = "No se encontró la cita especificada.";
+      } else if (error.response?.status === 403) {
+        errorMessage = "No tienes permisos para actualizar esta cita.";
+      } else if (error.response?.status === 400) {
+        errorMessage = "Datos inválidos. Por favor verifica la información.";
+      } else if (error.message === "El horario seleccionado ya no está disponible") {
+        errorMessage = "El horario seleccionado ya no está disponible. Por favor, elige otro horario.";
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      showError(errorMessage, "Error al actualizar");
+    } finally {
+      setSavingReservation(false);
+    }
+  };
+
+  const filterAppointments = (appointments: any[]) => {
+    const now = new Date();
+    return appointments.filter(appointment => {
+      const appointmentDate = new Date(`${appointment.date}T${appointment.time}`);
+      const isNotCanceled = showCanceledAppointments || appointment.status !== "cancelled";
+      const isUpcoming = appointmentDate >= now;
+      return isNotCanceled && isUpcoming;
+    });
+  };
+
+  const sortAppointments = (appointments: any[]) => {
+    return [...appointments].sort((a, b) => {
+      const dateA = new Date(`${a.date}T${a.time}`);
+      const dateB = new Date(`${b.date}T${b.time}`);
+      return dateA.getTime() - dateB.getTime();
+    });
+  };
+
+  const processAppointments = (appointments: any[]) => {
+    return sortAppointments(filterAppointments(appointments));
+  };
+
+  const renderAppointment = ({ item }: { item: any }) => (
+    <TouchableOpacity 
+      style={styles.appointmentCard}
+      activeOpacity={0.7}
+    >
+      <View style={styles.appointmentHeader}>
+        <View style={styles.dateContainer}>
+          <Text style={styles.dayText}>
+            {new Date(item.date).getDate()}
+          </Text>
+          <Text style={styles.monthText}>
+            {new Date(item.date).toLocaleDateString('es-ES', { month: 'short' })}
+          </Text>
+        </View>
+        <View style={styles.appointmentInfo}>
+          <Text style={styles.timeText}>
+            <Ionicons name="time-outline" size={16} color="#4A5568" /> {item.time.substring(0, 5)}
+          </Text>
+          <Text style={styles.serviceText}>
+            <Ionicons name="cut-outline" size={16} color="#4A5568" /> {item.service?.name || 'Servicio no especificado'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.detailsContainer}>
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Estilista:</Text>
+          <Text style={styles.detailValue}>
+            <Ionicons name="person-outline" size={16} color="#4A5568" /> {
+              getEmployeeName(item.employee?.id)
+            }
+          </Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Precio:</Text>
+          <Text style={styles.detailValue}>
+            <Ionicons name="cash-outline" size={16} color="#4A5568" /> $ {
+              item.service?.price || '0.00'
+            }
+          </Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Duración:</Text>
+          <Text style={styles.detailValue}>
+            <Ionicons name="time-outline" size={16} color="#4A5568" /> {
+              item.service?.duration || '0'
+            } min
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.appointmentActions}>
+        <View style={styles.statusContainer}>
+          <Text style={[
+            styles.statusText,
+            item.status === 'pending' ? styles.pendingStatus :
+            item.status === 'confirmed' ? styles.confirmedStatus :
+            styles.cancelledStatus
+          ]}>
+            {item.status === 'pending' ? 'Pendiente' :
+             item.status === 'confirmed' ? 'Confirmada' :
+             'Cancelada'}
+          </Text>
+        </View>
+
+        {item.status !== 'cancelled' && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() => handleEditAppointment(item)}
+            >
+              <Ionicons name="create-outline" size={20} color="#6B46C1" />
+              <Text style={styles.actionButtonText}>Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.cancelButton]}
+              onPress={() => handleCancelAppointment(item.id)}
+            >
+              <Ionicons name="close-circle-outline" size={20} color="#E53E3E" />
+              <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderAppointmentModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={modalVisible}
+      onRequestClose={() => setModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Mis Citas</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[
+                  styles.filterButton,
+                  !showCanceledAppointments && styles.filterButtonActive
+                ]}
+                onPress={() => setShowCanceledAppointments(!showCanceledAppointments)}
+              >
+                <Ionicons 
+                  name={showCanceledAppointments ? "eye-off-outline" : "eye-outline"} 
+                  size={20} 
+                  color={showCanceledAppointments ? "#718096" : "#6B46C1"} 
+                />
+                <Text style={[
+                  styles.filterButtonText,
+                  !showCanceledAppointments && styles.filterButtonTextActive
+                ]}>
+                  {showCanceledAppointments ? "Ocultar canceladas" : "Mostrar canceladas"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close-outline" size={24} color="#4A5568" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {loadingAppointments ? (
+            <View style={styles.emptyStateContainer}>
+              <ActivityIndicator size="large" color="#6B46C1" />
+              <Text style={styles.emptyStateText}>Cargando citas...</Text>
+            </View>
+          ) : userAppointments.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <Ionicons name="calendar-outline" size={64} color="#718096" />
+              <Text style={styles.emptyStateText}>
+                {showCanceledAppointments 
+                  ? "No tienes citas canceladas"
+                  : "No tienes citas programadas"}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={processAppointments([...userAppointments])}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={renderAppointment}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.appointmentsList}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderEditModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={isEditModalVisible}
+      onRequestClose={() => setIsEditModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Editar Cita</Text>
+            <TouchableOpacity
+              onPress={() => setIsEditModalVisible(false)}
+              style={styles.closeButton}
+            >
+              <Ionicons name="close" size={24} color="#4A5568" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Fecha</Text>
+              <Calendar
+                style={styles.calendar}
+                onDayPress={(day: { dateString: SetStateAction<string>; }) => setSelectedDate(day.dateString)}
+                markedDates={{
+                  [selectedDate]: { selected: true, selectedColor: '#6B46C1' }
+                }}
+                theme={{
+                  todayTextColor: '#6B46C1',
+                  selectedDayBackgroundColor: '#6B46C1',
+                  arrowColor: '#6B46C1',
+                }}
+              />
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Estilista</Text>
+              <View style={styles.employeesContainer}>
+                {employees.map((employee) => (
+                  <TouchableOpacity
+                    key={employee.id}
+                    style={[
+                      styles.employeeCard,
+                      selectedEmployee === employee.id && styles.selectedEmployeeCard
+                    ]}
+                    onPress={() => handleEmployeeSelect(employee.id)}
+                  >
+                    <View style={styles.employeeIcon}>
+                      <Ionicons 
+                        name="person-circle-outline" 
+                        size={40} 
+                        color={selectedEmployee === employee.id ? "#FFFFFF" : "#6B46C1"} 
+                      />
+                    </View>
+                    <Text 
+                      style={[
+                        styles.employeeText,
+                        selectedEmployee === employee.id && styles.selectedEmployeeText
+                      ]}
+                    >
+                      {employee.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {selectedDate && selectedEmployee && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Horario</Text>
+                {loadingHours ? (
+                  <ActivityIndicator size="large" color="#6B46C1" style={styles.loader} />
+                ) : (
+                  <View style={styles.hoursContainer}>
+                    {availableHours.map((hour) => (
+                      <TouchableOpacity
+                        key={hour}
+                        style={[
+                          styles.hourButton,
+                          selectedHour === hour && styles.selectedHour
+                        ]}
+                        onPress={() => setSelectedHour(hour)}
+                      >
+                        <Text 
+                          style={[
+                            styles.hourText,
+                            selectedHour === hour && styles.selectedHourText
+                          ]}
+                        >
+                          {hour}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              (!selectedDate || !selectedHour || !selectedEmployee) && styles.disabledButton
+            ]}
+            onPress={handleUpdateAppointment}
+            disabled={!selectedDate || !selectedHour || !selectedEmployee || savingReservation}
+          >
+            {savingReservation ? (
+              <ActivityIndicator color="#FFFFFF" style={styles.buttonIcon} />
+            ) : (
+              <Ionicons name="save-outline" size={24} color="#FFFFFF" style={styles.buttonIcon} />
+            )}
+            <Text style={styles.confirmText}>
+              {savingReservation ? 'Guardando...' : 'Guardar Cambios'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  useEffect(() => {
+    if (selectedDate && selectedEmployee) {
+      fetchAvailableHours(selectedDate, selectedEmployee);
+    } else {
+      setAvailableHours([]);
+      setReservedHours([]);
+    }
+  }, [selectedDate, selectedEmployee]);
+
+  const styles = StyleSheet.create({
+    container: { 
+      flex: 1, 
+      backgroundColor: '#F7FAFC' 
+    },
+    header: {
+      backgroundColor: '#6B46C1',
+      padding: 24,
+      paddingTop: Platform.OS === 'ios' ? 60 : 40,
+      borderBottomLeftRadius: 30,
+      borderBottomRightRadius: 30,
+      alignItems: 'center',
+      elevation: 8,
+      shadowColor: '#6B46C1',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    },
+    title: {
+      fontSize: 36,
+      fontWeight: '800',
+      color: '#FFFFFF',
+      marginBottom: 8,
+      letterSpacing: 0.5,
+      textShadowColor: 'rgba(0, 0, 0, 0.1)',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 2,
+    },
+    subtitle: {
+      fontSize: 18,
+      color: '#E9D8FD',
+      letterSpacing: 0.5,
+      opacity: 0.9,
+    },
+    scrollView: { 
+      flex: 1,
+    },
+    content: { 
+      padding: 20,
+      paddingTop: 10,
+    },
+    section: { 
+      marginBottom: 24,
+      backgroundColor: '#FFFFFF',
+      borderRadius: 20,
+      padding: 16,
+      elevation: 4,
+      shadowColor: '#6B46C1',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    },
+    sectionTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#2D3748',
+      marginBottom: 16,
+      letterSpacing: 0.5,
+    },
+    calendarContainer: {
+      borderRadius: 16,
+      overflow: 'hidden',
+    },
+    calendar: {
+      borderRadius: 16,
+    },
+    employeesContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingHorizontal: 4,
+    },
+    employeeCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 16,
+      padding: 16,
+      width: '48%',
+      alignItems: 'center',
+      elevation: 3,
+      shadowColor: '#6B46C1',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    selectedEmployeeCard: {
+      backgroundColor: '#6B46C1',
+      borderColor: '#553C9A',
+    },
+    employeeIcon: {
+      marginBottom: 12,
+      backgroundColor: '#F3E8FF',
+      borderRadius: 30,
+      padding: 8,
+    },
+    employeeText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#2D3748',
+      textAlign: 'center',
+    },
+    selectedEmployeeText: {
+      color: '#FFFFFF',
+    },
+    appointmentsButton: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 16,
+      padding: 16,
+      margin: 20,
+      marginTop: -20,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      elevation: 4,
+      shadowColor: '#6B46C1',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    appointmentsButtonText: {
+      color: '#6B46C1',
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginLeft: 8,
+    },
+    hoursContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      gap: 10,
+      paddingHorizontal: 4,
+    },
+    hourButton: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      padding: 12,
+      width: '31%',
+      alignItems: 'center',
+      elevation: 2,
+      shadowColor: '#6B46C1',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    reservedHour: {
+      backgroundColor: '#EDF2F7',
+      borderColor: '#CBD5E0',
+    },
+    selectedHour: {
+      backgroundColor: '#6B46C1',
+      borderColor: '#553C9A',
+    },
+    hourText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#2D3748',
+    },
+    reservedHourText: {
+      color: '#A0AEC0',
+    },
+    selectedHourText: {
+      color: '#FFFFFF',
+    },
+    reservedBadge: {
+      marginTop: 6,
+      padding: 4,
+      borderRadius: 6,
+      backgroundColor: '#CBD5E0',
+    },
+    reservedBadgeText: {
+      fontSize: 10,
+      fontWeight: '500',
+      color: '#4A5568',
+    },
+    footer: {
+      padding: 20,
+      backgroundColor: '#FFFFFF',
+      elevation: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+    },
+    confirmButton: {
+      backgroundColor: '#6B46C1',
+      borderRadius: 16,
+      padding: 18,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      elevation: 4,
+      shadowColor: '#6B46C1',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+    },
+    disabledButton: {
+      backgroundColor: '#CBD5E0',
+    },
+    buttonIcon: {
+      marginRight: 10,
+    },
+    confirmText: {
+      color: '#FFFFFF',
+      fontSize: 18,
+      fontWeight: 'bold',
+      letterSpacing: 0.5,
+    },
+    loader: {
+      marginVertical: 24,
+    },
+    noHoursText: {
+      textAlign: 'center',
+      color: '#718096',
+      fontSize: 16,
+      marginVertical: 24,
+    },
+    appointmentCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      padding: 15,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+    },
+    appointmentHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    dateContainer: {
+      backgroundColor: '#6B46C1',
+      borderRadius: 8,
+      padding: 8,
+      alignItems: 'center',
+      minWidth: 60,
+    },
+    dayText: {
+      color: 'white',
+      fontSize: 24,
+      fontWeight: 'bold',
+    },
+    monthText: {
+      color: 'white',
+      fontSize: 12,
+      textTransform: 'uppercase',
+    },
+    appointmentInfo: {
+      marginLeft: 12,
+      flex: 1,
+    },
+    timeText: {
+      fontSize: 16,
+      color: '#1A202C',
+      marginBottom: 4,
+      fontWeight: '500',
+    },
+    serviceText: {
+      fontSize: 14,
+      color: '#4A5568',
+      marginBottom: 4,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: '#E2E8F0',
+      marginVertical: 12,
+    },
+    detailsContainer: {
+      gap: 8,
+    },
+    detailRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    detailLabel: {
+      fontSize: 14,
+      color: '#718096',
+      fontWeight: '500',
+    },
+    detailValue: {
+      fontSize: 14,
+      color: '#4A5568',
+      fontWeight: '500',
+    },
+    statusContainer: {
+      alignItems: 'flex-end',
+    },
+    statusText: {
+      fontSize: 12,
+      fontWeight: 'bold',
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+    },
+    pendingStatus: {
+      backgroundColor: '#FEF3C7',
+      color: '#92400E',
+    },
+    confirmedStatus: {
+      backgroundColor: '#C6F6D5',
+      color: '#22543D',
+    },
+    cancelledStatus: {
+      backgroundColor: '#FED7D7',
+      color: '#822727',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 20,
+      padding: 20,
+      width: '90%',
+      maxHeight: '80%',
+      elevation: 5,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+      paddingBottom: 15,
+      borderBottomWidth: 1,
+      borderBottomColor: '#E2E8F0',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    modalTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: '#2D3748',
+    },
+    filterButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: '#F7FAFC',
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    filterButtonActive: {
+      backgroundColor: '#F3EEFF',
+      borderColor: '#6B46C1',
+    },
+    filterButtonText: {
+      marginLeft: 8,
+      fontSize: 14,
+      color: '#718096',
+    },
+    filterButtonTextActive: {
+      color: '#6B46C1',
+      fontWeight: '500',
+    },
+    closeButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: '#F7FAFC',
+    },
+    emptyStateContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    emptyStateText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: '#718096',
+      textAlign: 'center',
+    },
+    appointmentsList: {
+      paddingVertical: 10,
+    },
+    appointmentActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    actionButtons: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    actionButtonText: {
+      marginLeft: 4,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    editButton: {
+      borderColor: '#6B46C1',
+      backgroundColor: '#F3EEFF',
+    },
+    cancelButton: {
+      borderColor: '#E53E3E',
+      backgroundColor: '#FFF5F5',
+    },
+    cancelButtonText: {
+      color: '#E53E3E',
+    },
+    appointmentsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      marginBottom: 10,
+    },
+  });
+
+  const handleOpenAppointments = () => {
+    setModalVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Reservas</Text>
         <Text style={styles.subtitle}>Agenda tu cita en el estudio</Text>
       </View>
+
+      <TouchableOpacity 
+        style={styles.appointmentsButton}
+        onPress={handleOpenAppointments}
+      >
+        <Ionicons name="calendar" size={24} color="#6B46C1" />
+        <Text style={styles.appointmentsButtonText}>Ver Mis Citas</Text>
+      </TouchableOpacity>
+
+      {renderAppointmentModal()}
+
+      {renderEditModal()}
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
@@ -233,7 +1317,7 @@ const CitasScreen = () => {
                         styles.employeeCard,
                         selectedEmployee === employee.id && styles.selectedEmployeeCard
                       ]}
-                      onPress={() => setSelectedEmployee(employee.id)}
+                      onPress={() => handleEmployeeSelect(employee.id)}
                     >
                       <View style={styles.employeeIcon}>
                         <Ionicons 
@@ -325,227 +1409,5 @@ const CitasScreen = () => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FF',
-  },
-  header: {
-    backgroundColor: '#6B46C1',
-    padding: 24,
-    paddingTop: 60,
-    borderBottomLeftRadius: 35,
-    borderBottomRightRadius: 35,
-    shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontSize: 17,
-    color: '#E9D8FD',
-    letterSpacing: 0.3,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-    paddingTop: 30,
-  },
-  section: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#2D3748',
-    marginBottom: 20,
-    letterSpacing: 0.3,
-  },
-  calendarContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
-    shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(107, 70, 193, 0.08)',
-  },
-  calendar: {
-    borderRadius: 20,
-  },
-  employeesContainer: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    gap: 16,
-  },
-  employeeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    width: 130,
-    minHeight: 110,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    marginRight: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(107, 70, 193, 0.1)',
-  },
-  selectedEmployeeCard: {
-    backgroundColor: '#6B46C1',
-    borderColor: '#6B46C1',
-    shadowColor: '#6B46C1',
-    shadowOpacity: 0.3,
-    elevation: 6,
-  },
-  employeeIcon: {
-    marginBottom: 10,
-    backgroundColor: 'rgba(107, 70, 193, 0.1)',
-    borderRadius: 30,
-    padding: 8,
-  },
-  employeeText: {
-    fontSize: 15,
-    color: '#4A5568',
-    textAlign: 'center',
-    marginTop: 8,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  selectedEmployeeText: {
-    color: '#FFFFFF',
-  },
-  hoursContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  hourButton: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: 'rgba(107, 70, 193, 0.15)',
-    minWidth: 105,
-    alignItems: 'center',
-    shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  selectedHour: {
-    backgroundColor: '#6B46C1',
-    borderColor: '#6B46C1',
-    shadowOpacity: 0.2,
-    elevation: 4,
-  },
-  reservedHour: {
-    backgroundColor: '#FFF5F5',
-    borderColor: '#FEB2B2',
-    opacity: 0.9,
-  },
-  hourText: {
-    fontSize: 16,
-    color: '#4A5568',
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  selectedHourText: {
-    color: '#FFFFFF',
-  },
-  reservedHourText: {
-    color: '#E53E3E',
-  },
-  noHoursText: {
-    fontSize: 16,
-    color: '#718096',
-    textAlign: 'center',
-    marginVertical: 24,
-    fontWeight: '500',
-  },
-  reservedBadge: {
-    position: 'absolute',
-    top: -10,
-    right: -10,
-    backgroundColor: '#E53E3E',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  reservedBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  footer: {
-    padding: 20,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(107, 70, 193, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  confirmButton: {
-    backgroundColor: '#6B46C1',
-    padding: 18,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#6B46C1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  disabledButton: {
-    backgroundColor: '#E2E8F0',
-    shadowOpacity: 0,
-  },
-  buttonIcon: {
-    marginRight: 10,
-  },
-  confirmText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  loader: {
-    marginVertical: 24,
-  },
-});
 
 export default CitasScreen;

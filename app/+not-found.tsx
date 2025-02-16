@@ -19,7 +19,7 @@ export default function NotFoundScreen() {
         
         <TouchableOpacity 
           style={styles.button}
-          onPress={() => router.push("/(tabs)/search")}
+          onPress={() => router.push("/(tabs)/shop")}
         >
           <Ionicons name="home-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
           <Text style={styles.buttonText}>Volver al Inicio</Text>

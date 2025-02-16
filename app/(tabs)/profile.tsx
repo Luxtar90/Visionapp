@@ -4,7 +4,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from "../../src/constants/config"; 
+import API_URL from '../../config/api'; 
 import { useAlert } from '../../hooks/useAlert';
 
 export default function ProfileScreen() {
@@ -68,6 +68,10 @@ export default function ProfileScreen() {
     } catch (error) {
       showError('No se pudo cerrar sesión', 'Error');
     }
+  };
+
+  const handleEditProfile = () => {
+    router.push(`/(profile)/edit/${user.id}`);
   };
 
   return (
@@ -143,7 +147,7 @@ export default function ProfileScreen() {
           
           <TouchableOpacity 
             style={styles.menuItem} 
-            onPress={() => user.id && router.push(`/editprofile/${user.id}`)}
+            onPress={handleEditProfile}
           >
             <Ionicons name="person-outline" size={24} color="#6B46C1" />
             <Text style={styles.menuText}>Editar Perfil</Text>
