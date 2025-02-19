@@ -132,6 +132,7 @@ export default function TabsLayout() {
             />
           ),
           tabBarAccessibilityLabel: "Perfil de usuario",
+
         }}
       />
     </Tabs>
