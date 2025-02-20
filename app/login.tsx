@@ -9,6 +9,7 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../config/api";
 import CustomAlert from "../components/CustomAlert";
+import { useAuth } from './contexts/AuthContext';
 
 interface Store {
   id: number;
@@ -33,6 +34,7 @@ interface LoginResponse {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -104,13 +106,7 @@ export default function LoginScreen() {
       });
 
       console.log("✅ Inicio de sesión exitoso");
-
-      // Guardar token y datos del usuario
-      await AsyncStorage.setItem('token', response.data.token);
-      await AsyncStorage.setItem('userId', response.data.user.id.toString());
-      
       console.log("✅ Datos del usuario recibidos:", response.data);
-      console.log("📡 Enviando solicitud a:", `${API_URL}/users/${response.data.user.id}`);
 
       // Obtener datos adicionales del usuario
       const userResponse = await axios.get(`${API_URL}/users/${response.data.user.id}`, {
@@ -169,16 +165,29 @@ export default function LoginScreen() {
         name: firstStore.name
       });
 
+      // Usar AuthContext para iniciar sesión
+      const userRole = userResponse.data.role.nombre.toLowerCase();
+      console.log('📝 Rol del usuario:', userRole);
+
+      // Guardar userId para otras partes de la app que lo necesiten
+      await AsyncStorage.setItem('userId', response.data.user.id.toString());
+
+      const userData = {
+        id: response.data.user.id,
+        email: response.data.user.email,
+        name: response.data.user.name || response.data.user.nombre, // Manejar ambos casos
+        role: userRole
+      };
+
+      console.log('📝 Datos de usuario a guardar:', userData);
+
+      await signIn(response.data.token, userData);
+
       showAlert(
         "¡Bienvenido!",
         "Has iniciado sesión correctamente",
         'success'
       );
-
-      // Redirigimos a la pantalla principal
-      setTimeout(() => {
-        router.replace("/(tabs)/profile");
-      }, 1000);
 
     } catch (error: any) {
       console.error("❌ Error en el inicio de sesión:", error);

@@ -1,19 +1,27 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import Constants from '../constants/constants';
+import Constants from 'expo-constants';
+import { router } from 'expo-router';
+
+interface UserRole {
+  id: number;
+  nombre: string;
+  descripcion: string;
+}
 
 interface User {
   id: number;
+  name: string;
   email: string;
-  nombre: string;
+  role: UserRole | string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  error: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  role: string | null;
+  signIn: (token: string, userData: User) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -22,97 +30,134 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
-    loadUser();
+    loadStoredUser();
   }, []);
 
-  const loadUser = async () => {
+  const getRoleString = (userRole: UserRole | string): string => {
+    if (typeof userRole === 'string') {
+      return userRole;
+    }
+    return userRole.nombre;
+  };
+
+  async function loadStoredUser() {
     try {
-      const [token, userStr] = await Promise.all([
-        AsyncStorage.getItem('token'),
-        AsyncStorage.getItem('user')
+      console.log('🔄 Loading stored user data...');
+      const [userStr, tokenStr] = await Promise.all([
+        AsyncStorage.getItem('user'),
+        AsyncStorage.getItem('token')
       ]);
 
-      if (token && userStr) {
+      if (userStr && tokenStr) {
         const userData = JSON.parse(userStr);
-        setUser(userData);
+        console.log('✅ Found stored user:', userData);
         
-        // Configurar el token para todas las solicitudes futuras
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        setUser(userData);
+        const roleStr = getRoleString(userData.role);
+        setRole(roleStr);
+        
+        // Configurar axios
+        axios.defaults.headers.common['Authorization'] = `Bearer ${tokenStr}`;
+        
+        console.log('✅ Auth state restored:', { 
+          userId: userData.id,
+          userEmail: userData.email,
+          role: roleStr,
+          hasToken: !!tokenStr
+        });
+      } else {
+        console.log('ℹ️ No stored user data found');
+        // Limpiar el estado si no hay datos almacenados
+        setUser(null);
+        setRole(null);
+        delete axios.defaults.headers.common['Authorization'];
       }
-    } catch (err) {
-      console.error('❌ Error loading user data:', err);
-      setError('Error loading user data');
+    } catch (error) {
+      console.error('❌ Error loading stored user:', error);
+      // Limpiar todo en caso de error
+      await AsyncStorage.multiRemove(['token', 'user']);
+      setUser(null);
+      setRole(null);
+      delete axios.defaults.headers.common['Authorization'];
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const signIn = async (email: string, password: string) => {
-    setLoading(true);
+  async function signIn(token: string, userData: User) {
     try {
-      const response = await axios.post(`${Constants.API_URL}/auth/login`, {
-        email,
-        password,
-      });
+      console.log('🔄 Signing in user:', userData);
       
-      const { token, user: userData } = response.data;
+      // Primero actualizamos el estado
+      setUser(userData);
+      const roleStr = getRoleString(userData.role);
+      setRole(roleStr);
+      
+      // Configurar axios
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-      // Guardar token y datos del usuario
+      // Luego guardamos en AsyncStorage
       await Promise.all([
         AsyncStorage.setItem('token', token),
         AsyncStorage.setItem('user', JSON.stringify(userData))
       ]);
 
-      // Configurar el token para todas las solicitudes futuras
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      setUser(userData);
-      setError(null);
-    } catch (err) {
-      console.error('❌ Error during sign in:', err);
-      setError(err instanceof Error ? err.message : 'Error during sign in');
-      throw err;
-    } finally {
-      setLoading(false);
+      console.log('✅ Sign in successful:', {
+        userId: userData.id,
+        userEmail: userData.email,
+        role: roleStr,
+        hasToken: true
+      });
+
+      // Navegar a tabs
+      router.replace("/(tabs)/profile" as any);
+    } catch (error) {
+      console.error('❌ Error during sign in:', error);
+      // Limpiar todo en caso de error
+      await AsyncStorage.multiRemove(['token', 'user']);
+      setUser(null);
+      setRole(null);
+      delete axios.defaults.headers.common['Authorization'];
+      throw error;
     }
-  };
+  }
 
-  const signOut = async () => {
-    setLoading(true);
+  async function signOut() {
     try {
-      // Limpiar todos los datos de autenticación
-      await Promise.all([
-        AsyncStorage.removeItem('token'),
-        AsyncStorage.removeItem('user'),
-        AsyncStorage.removeItem('currentStoreId')
-      ]);
-
-      // Limpiar el token de las solicitudes
+      console.log('🔄 Signing out...');
+      setLoading(true);
+      
+      // Limpiar AsyncStorage
+      await AsyncStorage.multiRemove(['token', 'user']);
+      
+      // Limpiar estado
+      setUser(null);
+      setRole(null);
       delete axios.defaults.headers.common['Authorization'];
       
-      setUser(null);
-      setError(null);
-    } catch (err) {
-      console.error('❌ Error during sign out:', err);
-      setError(err instanceof Error ? err.message : 'Error during sign out');
+      router.replace("/login" as any);
+      console.log('✅ Sign out successful');
+    } catch (error) {
+      console.error('❌ Error during sign out:', error);
+      throw error;
     } finally {
       setLoading(false);
     }
+  }
+
+  const value = {
+    user,
+    loading,
+    role,
+    signIn,
+    signOut
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        error,
-        signIn,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -125,5 +170,3 @@ export function useAuth() {
   }
   return context;
 }
-
-export default AuthProvider;

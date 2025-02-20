@@ -1,5 +1,5 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+const tintColorLight = '#6B46C1';
+const tintColorDark = '#6B46C1';
 
 const Colors = {
   light: {

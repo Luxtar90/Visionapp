@@ -1,37 +1,47 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter, useSegments } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
+import LoadingScreen from '../screens/LoadingScreen';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  allowedRoles?: string[];
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
+export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+  const { user, loading, role } = useAuth();
 
   useEffect(() => {
-    if (!loading) {
-      // Verificar si estamos en una ruta pública
-      const isPublicRoute = segments.length > 0 && 
-        (segments[0] === 'login' || segments[0] === 'create-account');
+    console.log('ProtectedRoute - Checking access:', {
+      userEmail: user?.email,
+      userRole: role,
+      allowedRoles,
+      hasAccess: allowedRoles ? allowedRoles.includes(role?.toLowerCase() || '') : true
+    });
 
-      if (!user && !isPublicRoute) {
-        // Si no hay usuario y no estamos en una ruta pública,
-        // redirigir a login
-        router.replace('/login');
-      }
+    if (!loading && !user) {
+      console.log('ProtectedRoute - No user, redirecting to login');
+      router.replace('/login');
+      return;
     }
-  }, [user, loading, segments]);
+
+    if (!loading && role && allowedRoles && !allowedRoles.includes(role.toLowerCase())) {
+      console.log('ProtectedRoute - User does not have required role, redirecting to home');
+      router.replace('/');
+      return;
+    }
+  }, [user, loading, role, allowedRoles]);
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#6B46C1" />
-      </View>
-    );
+    return <LoadingScreen />;
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  if (allowedRoles && role && !allowedRoles.includes(role.toLowerCase())) {
+    return null;
   }
 
   return <>{children}</>;
