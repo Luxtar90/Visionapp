@@ -5,10 +5,19 @@
  * Todos los nuevos componentes deben importar el store desde /store/index.ts
  */
 
-import store from '../store';
+import { configureStore } from '@reduxjs/toolkit';
+import apiReducer from './reducers/api';
+import authReducer from './reducers/auth';
 
-// Re-exportamos el store desde la ubicación correcta
-export { store };
+export const store = configureStore({
+  reducer: {
+    api: apiReducer,
+    auth: authReducer,
+  },
+});
 
-// También exportamos los tipos para facilitar la migración
-export type { RootState } from '../store';
+// Inferir los tipos del store
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+
+export default store;
