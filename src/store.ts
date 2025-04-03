@@ -11,4 +11,4 @@ import store from '../store';
 export { store };
 
 // También exportamos los tipos para facilitar la migración
-// export type { RootState } from '../store'; // Comentado porque este es un archivo JS
+export type { RootState } from '../store';

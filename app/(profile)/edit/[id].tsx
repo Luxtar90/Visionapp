@@ -1,20 +1,32 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ActivityIndicator 
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../contexts/AuthContext";
+import apiService from '../../../utils/api';
 
-// URL de la API
-const API_URL = 'http://192.168.100.129:3000';
+// Definir la interfaz para el tipo de usuario
+interface UserData {
+  id?: number;
+  name?: string;
+  email?: string;
+  telefono?: string;
+  role?: {
+    id: number;
+    nombre: string;
+    descripcion?: string;
+  };
+  [key: string]: any; // Para permitir otras propiedades que puedan venir de la API
+}
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
+  // We'll use authUser if needed
   const { user: authUser } = useAuth();
 
   const [user, setUser] = useState({
@@ -24,60 +36,56 @@ export default function EditProfileScreen() {
     role: { id: 0, nombre: "" }
   });
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        console.log(" Intentando obtener datos del usuario:", id);
-        console.log(" Token:", token);
-        console.log(" URL:", `${API_URL}/users/${id}`);
-        
-        if (!token) {
-          console.error(" No hay token de autenticación");
-          Alert.alert('Error', 'No hay sesión activa. Por favor, inicia sesión nuevamente.');
-          router.replace("/login");
-          return;
-        }
-
-        const response = await axios.get(`${API_URL}/users/${id}`, {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        console.log(" Respuesta del servidor:", response.data);
-        const userData = response.data;
-        setUser({
-          name: userData.name || "",
-          email: userData.email || "",
-          telefono: userData.telefono || "",
-          role: userData.role || { id: 2, nombre: "client" }
-        });
-      } catch (error: any) {
-        console.error(' Error fetching user data:', error);
-        console.error(' Error details:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data
-        });
-        
-        if (!error.response) {
-          Alert.alert(
-            'Error de conexión', 
-            'No se pudo conectar con el servidor. Por favor, verifica tu conexión e intenta nuevamente.'
-          );
-        } else {
-          Alert.alert(
-            'Error', 
-            'No se pudo cargar la información del usuario.'
-          );
-        }
-      } finally {
-        setLoading(false);
+  // Use useCallback to memoize the fetchUserData function
+  const fetchUserData = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      console.log(" Intentando obtener datos del usuario:", id);
+      console.log(" Token:", token);
+      console.log(" URL:", `/users/${id}`);
+      
+      if (!token) {
+        console.error(" No hay token de autenticación");
+        Alert.alert('Error', 'No hay sesión activa. Por favor, inicia sesión nuevamente.');
+        router.replace("/login");
+        return;
       }
-    };
 
+      // Usar el servicio API centralizado que maneja errores y caché
+      const userData = await apiService.get<UserData>(`/users/${id}`);
+      
+      console.log(" Respuesta del servidor:", userData);
+      setUser({
+        name: userData.name || "",
+        email: userData.email || "",
+        telefono: userData.telefono || "",
+        role: userData.role || { id: 2, nombre: "client" }
+      });
+    } catch (error: any) {
+      console.error(' Error fetching user data:', error);
+      console.error(' Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      
+      if (!error.response) {
+        Alert.alert(
+          'Error de conexión', 
+          'No se pudo conectar con el servidor. Por favor, verifica tu conexión e intenta nuevamente.'
+        );
+      } else {
+        Alert.alert(
+          'Error', 
+          'No se pudo cargar la información del usuario.'
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [id, router]); // Add router to dependencies
+
+  useEffect(() => {
     if (id) {
       fetchUserData();
     } else {
@@ -85,7 +93,7 @@ export default function EditProfileScreen() {
       Alert.alert('Error', 'No se pudo identificar el usuario a editar');
       router.back();
     }
-  }, [id]);
+  }, [id, fetchUserData, router]); // Add fetchUserData and router to dependencies
 
   const handleUpdateProfile = async () => {
     try {
@@ -102,12 +110,8 @@ export default function EditProfileScreen() {
         telefono: user.telefono
       };
       
-      await axios.put(`${API_URL}/users/${id}`, updateData, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Usar el servicio API centralizado que maneja errores y caché
+      await apiService.put(`/users/${id}`, updateData);
       
       Alert.alert('Éxito', 'Perfil actualizado correctamente');
       router.back();
@@ -129,49 +133,56 @@ export default function EditProfileScreen() {
         <Text style={styles.headerTitle}>Editar Perfil</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Nombre</Text>
-          <TextInput
-            style={styles.input}
-            value={user.name}
-            onChangeText={(text) => setUser({ ...user, name: text })}
-            placeholder="Nombre"
-            placeholderTextColor="#A0AEC0"
-          />
+      {loading ? (
+        <View style={[styles.content, styles.loadingContainer]}>
+          <ActivityIndicator size="large" color="#6B46C1" />
+          <Text style={styles.loadingText}>Cargando información...</Text>
         </View>
+      ) : (
+        <View style={styles.content}>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Nombre</Text>
+            <TextInput
+              style={styles.input}
+              value={user.name}
+              onChangeText={(text) => setUser({ ...user, name: text })}
+              placeholder="Nombre"
+              placeholderTextColor="#A0AEC0"
+            />
+          </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={user.email}
-            onChangeText={(text) => setUser({ ...user, email: text })}
-            placeholder="Email"
-            placeholderTextColor="#A0AEC0"
-            keyboardType="email-address"
-          />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={user.email}
+              onChangeText={(text) => setUser({ ...user, email: text })}
+              placeholder="Email"
+              placeholderTextColor="#A0AEC0"
+              keyboardType="email-address"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Teléfono</Text>
+            <TextInput
+              style={styles.input}
+              value={user.telefono}
+              onChangeText={(text) => setUser({ ...user, telefono: text })}
+              placeholder="Teléfono"
+              placeholderTextColor="#A0AEC0"
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <TouchableOpacity 
+            style={styles.updateButton}
+            onPress={handleUpdateProfile}
+          >
+            <Text style={styles.updateButtonText}>Actualizar Perfil</Text>
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Teléfono</Text>
-          <TextInput
-            style={styles.input}
-            value={user.telefono}
-            onChangeText={(text) => setUser({ ...user, telefono: text })}
-            placeholder="Teléfono"
-            placeholderTextColor="#A0AEC0"
-            keyboardType="phone-pad"
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={styles.updateButton}
-          onPress={handleUpdateProfile}
-        >
-          <Text style={styles.updateButtonText}>Actualizar Perfil</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -207,6 +218,15 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     padding: 20
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#2D3748',
   },
   formGroup: {
     marginBottom: 20

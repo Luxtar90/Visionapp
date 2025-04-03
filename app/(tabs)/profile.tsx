@@ -1,16 +1,46 @@
-import { useState, useCallback } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Alert } from "react-native";
+import { useState, useCallback, useEffect } from "react";
+import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import API_URL from '../../config/api'; 
+import { useAuth } from '../contexts/AuthContext';
 import { useAlert } from '../../hooks/useAlert';
+import theme from '../../theme';
+import Button from '../../components/Button';
+import Card from '../../components/Card';
+import Avatar from '../../components/Avatar';
+import Badge from '../../components/Badge';
+
+// Definir la interfaz para el rol de usuario
+interface UserRole {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  creadoEn?: string;
+  deletedAt?: string | null;
+}
+
+// Definir la interfaz para el tipo de usuario
+interface UserData {
+  id?: number;
+  name?: string;
+  email?: string;
+  role?: UserRole | string;
+  profileImage?: string;
+  [key: string]: any; // Para permitir otras propiedades que puedan venir de la API
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { showSuccess, showError } = useAlert();
-  const [user, setUser] = useState({
+  const { user: authUser, signOut, refreshUserData } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<{
+    id: number | null;
+    name: string;
+    email: string;
+    role: UserRole | string;
+    profileImage: string;
+  }>({
     id: null,
     name: "Cargando...",
     email: "Cargando...",
@@ -18,55 +48,103 @@ export default function ProfileScreen() {
     profileImage: "https://via.placeholder.com/100",
   });
 
-  const fetchUserData = async () => {
+  // Modified fetchUserData to prevent infinite loop
+  const fetchUserData = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      const userIdString = await AsyncStorage.getItem("userId");
+      setLoading(true);
+      
+      // Primero intentamos usar los datos del contexto de autenticación
+      if (authUser) {
+        // Determinar el rol del usuario (objeto o cadena)
+        let userRole: UserRole | string = "Sin rol";
+        if (authUser.role) {
+          if (typeof authUser.role === 'object') {
+            userRole = authUser.role;
+          } else if (authUser.role) {
+            userRole = String(authUser.role);
+          }
+        }
+        
+        setUser({
+          id: authUser.id,
+          name: authUser.name || "Usuario",
+          email: authUser.email || "Correo no disponible",
+          role: userRole,
+          profileImage: authUser.profileImage || "https://via.placeholder.com/100",
+        });
+      } else {
+        // Si no hay usuario en el contexto, refrescamos los datos
+        await refreshUserData();
+        
+        // We need to check if authUser is available after the refresh
+        // Since we can't access the updated authUser directly here,
+        // we'll handle this in the useEffect that depends on authUser
+      }
+    } catch (error: any) {
+      console.error("❌ Error al obtener datos del usuario:", error);
+      // No mostramos alerta aquí porque el servicio API ya maneja los errores
+    } finally {
+      setLoading(false);
+    }
+  }, [authUser, refreshUserData]);
 
-      if (!token || !userIdString) {
-        console.error("🚨 No hay token o userId almacenado");
+  // This effect will run whenever authUser changes (including after refreshUserData)
+  useEffect(() => {
+    if (authUser) {
+      // Determinar el rol del usuario (objeto o cadena)
+      let userRole: UserRole | string = "Sin rol";
+      if (authUser.role) {
+        if (typeof authUser.role === 'object') {
+          userRole = authUser.role;
+        } else if (authUser.role) {
+          userRole = String(authUser.role);
+        }
+      }
+      
+      setUser({
+        id: authUser.id,
+        name: authUser.name || "Usuario",
+        email: authUser.email || "Correo no disponible",
+        role: userRole,
+        profileImage: authUser.profileImage || "https://via.placeholder.com/100",
+      });
+    } else {
+      // If no user is available and we're not in the loading state,
+      // redirect to login
+      if (!loading) {
+        console.error("🚨 No hay usuario autenticado");
         Alert.alert("Error", "No has iniciado sesión. Redirigiendo...");
         router.push("/login");
-        return;
       }
-
-      const userId = Number(userIdString);
-      console.log("📡 Enviando solicitud a:", `${API_URL}/users/${userId}`);
-
-      const response = await axios.get(`${API_URL}/users/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      console.log("✅ Datos del usuario recibidos:", response.data);
-
-      setUser({
-        id: response.data.id || userId,
-        name: response.data.name || "Usuario",
-        email: response.data.email || "Correo no disponible",
-        role: response.data.role?.nombre || "Sin rol",
-        profileImage: response.data.profileImage || "https://via.placeholder.com/100",
-      });
-    } catch (error: any) {
-      console.error("❌ Error al obtener datos del usuario:", error.response?.data || error);
-      Alert.alert("Error", "No se pudo cargar la información del usuario.");
     }
-  };
+  }, [authUser, loading, router]);
 
-  // ✅ Ejecutar fetchUserData cada vez que la pantalla de perfil se enfoque
+  // Initial data fetch
+  useEffect(() => {
+    fetchUserData();
+  }, [fetchUserData]);
+  
+  // Use useFocusEffect for subsequent focus events
   useFocusEffect(
     useCallback(() => {
-      fetchUserData();
+      // Only fetch if not the initial render
+      const unsubscribe = () => {
+        // This is the cleanup function
+      };
+      return unsubscribe;
     }, [])
   );
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem("token");
-      await AsyncStorage.removeItem("userId");
+      setLoading(true);
+      await signOut();
       showSuccess('Has cerrado sesión exitosamente', 'Hasta pronto');
-      router.push("/login");
     } catch (error) {
       showError('No se pudo cerrar sesión', 'Error');
+      console.error('❌ Error al cerrar sesión:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -77,100 +155,163 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.profileImageContainer}>
-          <Image source={{ uri: user.profileImage }} style={styles.profileImage} />
-          <TouchableOpacity style={styles.editImageButton} onPress={() => alert("Editar Foto")}>
-            <Ionicons name="camera" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        <Avatar 
+          source={{ uri: user.profileImage }} 
+          size="xl"
+          name={user.name}
+          showBadge={true}
+          badgeIcon="camera"
+          badgeColor={theme.colors.primary}
+          badgeSize={32}
+          onPress={() => alert("Editar Foto")}
+          bordered
+          borderColor={theme.colors.white}
+        />
         <Text style={styles.name}>{user.name}</Text>
         <Text style={styles.email}>{user.email}</Text>
-        <Text style={styles.role}>Rol: {user.role}</Text>
+        <Badge 
+          text={typeof user.role === 'object' ? user.role.nombre : String(user.role)} 
+          variant="primary"
+          size="md"
+          pill
+        />
       </View>
 
       <View style={styles.content}>
         {/* Panel de Administración - Solo visible para admins */}
-        {user.role === 'admin' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Panel de Administración</Text>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push("/(admin)/Users" as any)}
-            >
-              <Ionicons name="people" size={24} color="#6B46C1" />
-              <Text style={styles.menuText}>Gestionar Usuarios</Text>
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>Asignar Roles</Text>
+        {(user.role === 'admin' || (typeof user.role === 'object' && user.role.nombre?.toLowerCase() === 'admin')) && (
+          <Card 
+            title="Panel de Administración"
+            icon="people-circle"
+            iconColor={theme.colors.primary}
+            elevation="md"
+            style={styles.section}
+          >
+            <View>
+              <View style={styles.menuItem}>
+                <Ionicons name="people" size={24} color={theme.colors.primary} />
+                <Text style={styles.menuText}>Gestionar Usuarios</Text>
+                <Badge 
+                  text="Asignar Roles" 
+                  variant="secondary"
+                  size="sm"
+                />
+                <Button 
+                  title="" 
+                  variant="ghost" 
+                  size="sm" 
+                  rightIcon="chevron-forward"
+                  onPress={() => router.push("/(admin)/Users" as any)}
+                />
               </View>
-              <Ionicons name="chevron-forward" size={24} color="#718096" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push("/(admin)/Services" as any)}
-            >
-              <Ionicons name="cut" size={24} color="#6B46C1" />
-              <Text style={styles.menuText}>Gestionar Servicios</Text>
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>Nuevo</Text>
+              
+              <View style={styles.menuItem}>
+                <Ionicons name="cut" size={24} color={theme.colors.primary} />
+                <Text style={styles.menuText}>Gestionar Servicios</Text>
+                <Badge 
+                  text="Nuevo" 
+                  variant="success"
+                  size="sm"
+                />
+                <Button 
+                  title="" 
+                  variant="ghost" 
+                  size="sm" 
+                  rightIcon="chevron-forward"
+                  onPress={() => router.push("/(admin)/Services" as any)}
+                />
               </View>
-              <Ionicons name="chevron-forward" size={24} color="#718096" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push("/(admin)/Products" as any)}
-            >
-              <Ionicons name="basket" size={24} color="#6B46C1" />
-              <Text style={styles.menuText}>Gestionar Productos</Text>
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>Nuevo</Text>
+              
+              <View style={styles.menuItem}>
+                <Ionicons name="basket" size={24} color={theme.colors.primary} />
+                <Text style={styles.menuText}>Gestionar Productos</Text>
+                <Badge 
+                  text="Nuevo" 
+                  variant="success"
+                  size="sm"
+                />
+                <Button 
+                  title="" 
+                  variant="ghost" 
+                  size="sm" 
+                  rightIcon="chevron-forward"
+                  onPress={() => router.push("/(admin)/Products" as any)}
+                />
               </View>
-              <Ionicons name="chevron-forward" size={24} color="#718096" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push("/(admin)/Stats" as any)}
-            >
-              <Ionicons name="stats-chart" size={24} color="#6B46C1" />
-              <Text style={styles.menuText}>Estadísticas</Text>
-              <Ionicons name="chevron-forward" size={24} color="#718096" />
-            </TouchableOpacity>
-          </View>
+              
+              <View style={styles.menuItem}>
+                <Ionicons name="stats-chart" size={24} color={theme.colors.primary} />
+                <Text style={styles.menuText}>Estadísticas</Text>
+                <Button 
+                  title="" 
+                  variant="ghost" 
+                  size="sm" 
+                  rightIcon="chevron-forward"
+                  onPress={() => router.push("/(admin)/Stats" as any)}
+                />
+              </View>
+            </View>
+          </Card>
         )}
 
         {/* Ajustes de cuenta existentes */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ajustes de Cuenta</Text>
-          
-          <TouchableOpacity 
-            style={styles.menuItem} 
-            onPress={handleEditProfile}
-          >
-            <Ionicons name="person-outline" size={24} color="#6B46C1" />
-            <Text style={styles.menuText}>Editar Perfil</Text>
-            <Ionicons name="chevron-forward" size={24} color="#718096" />
-          </TouchableOpacity>
+        <Card 
+          title="Ajustes de Cuenta"
+          icon="settings-outline"
+          iconColor={theme.colors.primary}
+          elevation="sm"
+          style={styles.section}
+        >
+          <View>
+            <View style={styles.menuItem}>
+              <Ionicons name="person-outline" size={24} color={theme.colors.primary} />
+              <Text style={styles.menuText}>Editar Perfil</Text>
+              <Button 
+                title="Editar" 
+                variant="ghost" 
+                size="sm" 
+                rightIcon="chevron-forward"
+                onPress={handleEditProfile}
+              />
+            </View>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="notifications-outline" size={24} color="#6B46C1" />
-            <Text style={styles.menuText}>Notificaciones</Text>
-            <Ionicons name="chevron-forward" size={24} color="#718096" />
-          </TouchableOpacity>
+            <View style={styles.menuItem}>
+              <Ionicons name="notifications-outline" size={24} color={theme.colors.primary} />
+              <Text style={styles.menuText}>Notificaciones</Text>
+              <Button 
+                title="Ver" 
+                variant="ghost" 
+                size="sm" 
+                rightIcon="chevron-forward"
+                onPress={() => alert("Notificaciones")}
+              />
+            </View>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="shield-checkmark-outline" size={24} color="#6B46C1" />
-            <Text style={styles.menuText}>Privacidad</Text>
-            <Ionicons name="chevron-forward" size={24} color="#718096" />
-          </TouchableOpacity>
-        </View>
+            <View style={styles.menuItem}>
+              <Ionicons name="shield-checkmark-outline" size={24} color={theme.colors.primary} />
+              <Text style={styles.menuText}>Privacidad</Text>
+              <Button 
+                title="Ver" 
+                variant="ghost" 
+                size="sm" 
+                rightIcon="chevron-forward"
+                onPress={() => alert("Privacidad")}
+              />
+            </View>
+          </View>
+        </Card>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={24} color="#E53E3E" />
-          <Text style={styles.logoutText}>Cerrar Sesión</Text>
-        </TouchableOpacity>
+        <Button 
+          title="Cerrar Sesión" 
+          variant="outline" 
+          size="lg" 
+          leftIcon="log-out-outline"
+          style={styles.logoutButton}
+          textStyle={{ color: theme.colors.error }}
+          onPress={handleLogout}
+          loading={loading}
+          fullWidth
+        />
       </View>
     </ScrollView>
   );
@@ -179,152 +320,53 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: "#F8F9FF"
+    backgroundColor: theme.colors.background
   },
   header: { 
-    backgroundColor: "#6B46C1", 
-    padding: 24,
+    backgroundColor: theme.colors.primary, 
+    padding: theme.spacing.lg,
     paddingTop: 60, 
     alignItems: "center", 
     borderBottomLeftRadius: 40, 
     borderBottomRightRadius: 40,
-    shadowColor: "#6B46C1",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  profileImageContainer: { 
-    position: "relative", 
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  profileImage: { 
-    width: 110, 
-    height: 110, 
-    borderRadius: 55, 
-    borderWidth: 4, 
-    borderColor: "#FFFFFF" 
-  },
-  editImageButton: { 
-    position: "absolute", 
-    right: -4, 
-    bottom: -4, 
-    backgroundColor: "#6B46C1", 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: "center", 
-    alignItems: "center", 
-    borderWidth: 3, 
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    ...theme.shadows.lg,
+    marginBottom: theme.spacing.md,
   },
   name: { 
-    fontSize: 26, 
+    fontSize: theme.typography.fontSizes.xxl, 
     fontWeight: "700", 
-    color: "#FFFFFF", 
-    marginBottom: 6,
+    color: theme.colors.white, 
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
     letterSpacing: 0.5,
   },
   email: { 
-    fontSize: 16, 
-    color: "#E9D8FD", 
-    marginBottom: 6,
+    fontSize: theme.typography.fontSizes.md, 
+    color: theme.colors.primaryLight, 
+    marginBottom: theme.spacing.md,
     letterSpacing: 0.3,
-  },
-  role: { 
-    fontSize: 15, 
-    color: "#FFFFFF", 
-    fontWeight: "600", 
-    marginBottom: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
   },
   content: { 
-    padding: 20,
-    paddingTop: 30,
+    padding: theme.spacing.lg,
   },
   section: { 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 20, 
-    padding: 20, 
-    marginBottom: 24,
-    shadowColor: "#6B46C1",
-    shadowOffset: { width: 0, height: 6 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 12,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: "rgba(107, 70, 193, 0.08)",
-  },
-  sectionTitle: { 
-    fontSize: 19, 
-    fontWeight: "700", 
-    color: "#2D3748", 
-    marginBottom: 20,
-    letterSpacing: 0.3,
+    marginBottom: theme.spacing.xl,
   },
   menuItem: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+    ...theme.commonStyles.rowBetween, 
+    paddingVertical: theme.spacing.md,
     borderBottomWidth: 1, 
-    borderBottomColor: "#EDF2F7",
+    borderBottomColor: theme.colors.border,
   },
   menuText: { 
     flex: 1, 
-    marginLeft: 14, 
-    fontSize: 16, 
-    color: "#4A5568",
+    marginLeft: theme.spacing.md, 
+    fontSize: theme.typography.fontSizes.md, 
+    color: theme.colors.textSecondary,
     fontWeight: "500",
   },
   logoutButton: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    backgroundColor: "#FFF5F5", 
-    padding: 18,
-    borderRadius: 16, 
-    borderWidth: 1.5, 
-    borderColor: "#FED7D7",
-    shadowColor: "#E53E3E",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  logoutText: { 
-    marginLeft: 10, 
-    fontSize: 17, 
-    fontWeight: "600", 
-    color: "#E53E3E",
-    letterSpacing: 0.3,
-  },
-  badgeContainer: {
-    backgroundColor: '#F3E8FF',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: "rgba(107, 70, 193, 0.1)",
-  },
-  badgeText: {
-    color: '#6B46C1',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
+    marginBottom: theme.spacing.xl,
+    borderColor: theme.colors.error,
+  }
 });

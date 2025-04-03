@@ -1,10 +1,9 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal, RefreshControl, Animated, StyleProp, ViewStyle, TextStyle, ImageStyle } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, RefreshControl, Animated, StyleProp, ViewStyle, TextStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, Stack, useFocusEffect } from "expo-router";
-import axios from 'axios';
-import API_URL from '../../config/api';
 import { useState, useEffect, useMemo, useCallback } from "react";
+import apiService from '../../utils/api';
 import { useAlert } from '../../hooks/useAlert';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import Skeleton from '../components/Skeleton';
@@ -34,10 +33,7 @@ interface User {
   };
 }
 
-interface Client {
-  id_user: number;
-  user?: User;
-}
+// Removed unused Client interface
 
 type AppointmentStatus = 'pending' | 'completed' | 'cancelled';
 
@@ -65,7 +61,9 @@ interface CalendarDay {
   timestamp: number;
 }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface AppointmentCardProps {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   date: string;
@@ -93,89 +91,8 @@ const ClientAppointmentsScreen = () => {
   const router = useRouter();
   const { showError } = useAlert();
 
-  // Actualizar citas cuando la pantalla recibe el foco
-  useFocusEffect(
-    useCallback(() => {
-      if (clientId) {
-        console.log("🔄 Actualizando citas al recibir foco...");
-        fetchAppointments();
-      }
-    }, [clientId])
-  );
-
-  // Obtener el ID del cliente al montar el componente
-  useEffect(() => {
-    const fetchUserId = async () => {
-      try {
-        const userIdString = await AsyncStorage.getItem("userId");
-        
-        if (!userIdString) {
-          console.error("❌ No se encontró el ID del usuario logueado");
-          showError("No se encontró el ID del usuario", "Error de sesión");
-          return;
-        }
-
-        const id = Number(userIdString);
-        setClientId(id);
-        console.log("✅ ID del usuario/cliente logueado:", id);
-      } catch (error) {
-        console.error("❌ Error al obtener el ID del usuario/cliente:", error);
-        showError("Error al obtener información del usuario", "Error de sesión");
-      }
-    };
-
-    fetchUserId();
-  }, []);
-
-  // Cargar citas cuando tengamos el clientId
-  useEffect(() => {
-    if (clientId) {
-      fetchAppointments();
-    }
-  }, [clientId]);
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  // Verificar el rol del usuario al montar el componente
-  useEffect(() => {
-    const checkAccess = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const userId = await AsyncStorage.getItem('userId');
-
-        if (!token || !userId) {
-          showError('Error de autenticación', 'Por favor, inicie sesión nuevamente');
-          router.push('/login');
-          return;
-        }
-
-        const response = await axios.get(`${API_URL}/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const userRole = response.data.role?.nombre?.toLowerCase();
-        if (userRole !== 'client' && userRole !== 'admin') {
-          showError('Acceso denegado', 'Esta página es solo para clientes y administradores');
-          router.push('/');
-          return;
-        }
-      } catch (error) {
-        console.error('Error al verificar el acceso:', error);
-        showError('Error', 'No se pudo verificar el acceso');
-        router.push('/');
-      }
-    };
-
-    checkAccess();
-  }, []);
-
-  const fetchAppointments = async () => {
+  // Define fetchAppointments with useCallback before using it
+  const fetchAppointments = useCallback(async () => {
     if (!clientId) return;
 
     try {
@@ -189,15 +106,14 @@ const ClientAppointmentsScreen = () => {
         return;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const userData = JSON.parse(userStr);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const userRole = userData.role?.nombre?.toLowerCase();
 
       console.log("🔍 Obteniendo citas...");
-      const response = await axios.get(`${API_URL}/appointments`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      let appointmentsData = response.data;
+      // Usar el servicio API centralizado que maneja errores y caché
+      let appointmentsData = await apiService.get<Appointment[]>('/appointments');
       console.log("📋 Total de citas obtenidas:", appointmentsData.length);
       console.log("👤 ID del usuario logueado:", clientId);
 
@@ -225,14 +141,95 @@ const ClientAppointmentsScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [clientId, router, showError]);
+
+  // Actualizar citas cuando la pantalla recibe el foco
+  useFocusEffect(
+    useCallback(() => {
+      if (clientId) {
+        console.log("🔄 Actualizando citas al recibir foco...");
+        fetchAppointments();
+      }
+    }, [clientId, fetchAppointments])
+  );
+
+  // Obtener el ID del cliente al montar el componente
+  useEffect(() => {
+    const fetchUserId = async () => {
+      try {
+        const userIdString = await AsyncStorage.getItem("userId");
+        
+        if (!userIdString) {
+          console.error("❌ No se encontró el ID del usuario logueado");
+          showError("No se encontró el ID del usuario", "Error de sesión");
+          return;
+        }
+
+        const id = Number(userIdString);
+        setClientId(id);
+        console.log("✅ ID del usuario/cliente logueado:", id);
+      } catch (error) {
+        console.error("❌ Error al obtener el ID del usuario/cliente:", error);
+        showError("Error al obtener información del usuario", "Error de sesión");
+      }
+    };
+
+    fetchUserId();
+  }, [showError]);
+
+  // Cargar citas cuando tengamos el clientId
+  useEffect(() => {
+    if (clientId) {
+      fetchAppointments();
+    }
+  }, [clientId, fetchAppointments]);
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
+  // Verificar el rol del usuario al montar el componente
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+
+        if (!userId) {
+          showError('Error de autenticación', 'Por favor, inicie sesión nuevamente');
+          router.push('/login');
+          return;
+        }
+
+        // Usar el servicio API centralizado que maneja errores y caché
+        // Forzar la actualización para obtener el rol más reciente
+        const userData = await apiService.get<User>(`/users/${userId}`, {}, { forceRefresh: true });
+
+        const userRole = userData.role?.nombre?.toLowerCase();
+        if (userRole !== 'client' && userRole !== 'admin') {
+          showError('Acceso denegado', 'Esta página es solo para clientes y administradores');
+          router.push('/');
+          return;
+        }
+      } catch (error) {
+        console.error('Error al verificar el acceso:', error);
+        showError('Error', 'No se pudo verificar el acceso');
+        router.push('/');
+      }
+    };
+
+    checkAccess();
+  }, [router, showError]);
 
   const onRefresh = useCallback(() => {
     if (clientId) {
       setRefreshing(true);
       fetchAppointments();
     }
-  }, [clientId]);
+  }, [clientId, fetchAppointments]);
 
   const renderAppointmentSkeleton = () => (
     <View style={styles.skeletonContainer as ViewStyle}>

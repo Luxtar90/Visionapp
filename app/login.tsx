@@ -10,6 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API_URL from "../config/api";
 import CustomAlert from "../components/CustomAlert";
 import { useAuth } from './contexts/AuthContext';
+import apiService from '../utils/api';
 
 interface Store {
   id: number;
@@ -108,14 +109,7 @@ export default function LoginScreen() {
       console.log("✅ Inicio de sesión exitoso");
       console.log("✅ Datos del usuario recibidos:", response.data);
 
-      // Obtener datos adicionales del usuario
-      const userResponse = await axios.get(`${API_URL}/users/${response.data.user.id}`, {
-        headers: {
-          Authorization: `Bearer ${response.data.token}`,
-        },
-      });
-
-      console.log("✅ Datos del usuario recibidos:", userResponse.data);
+      console.log("✅ Usando datos del usuario de la respuesta de login");
 
       // Si es un cliente, obtenemos las tiendas asociadas
       console.log("📝 Obteniendo tiendas asociadas...");
@@ -165,23 +159,9 @@ export default function LoginScreen() {
         name: firstStore.name
       });
 
-      // Usar AuthContext para iniciar sesión
-      const userRole = userResponse.data.role.nombre.toLowerCase();
-      console.log('📝 Rol del usuario:', userRole);
-
-      // Guardar userId para otras partes de la app que lo necesiten
-      await AsyncStorage.setItem('userId', response.data.user.id.toString());
-
-      const userData = {
-        id: response.data.user.id,
-        email: response.data.user.email,
-        name: response.data.user.name || response.data.user.nombre, // Manejar ambos casos
-        role: userRole
-      };
-
-      console.log('📝 Datos de usuario a guardar:', userData);
-
-      await signIn(response.data.token, userData);
+      // Usar el nuevo servicio de autenticación para iniciar sesión
+      // El servicio se encarga de guardar el token, obtener el rol real y gestionar la caché
+      await signIn(email, password);
 
       showAlert(
         "¡Bienvenido!",

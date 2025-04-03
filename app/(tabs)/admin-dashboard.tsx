@@ -2,9 +2,8 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, Stack } from "expo-router";
-import axios from 'axios';
-import API_URL from '../../config/api';
 import { useState, useEffect, useMemo, useCallback } from "react";
+import apiService from '../../utils/api';
 import { useAlert } from '../../hooks/useAlert';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
@@ -90,11 +89,10 @@ function EmployeeAppointmentsScreen() {
           return;
         }
 
-        const response = await axios.get(`${API_URL}/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        // Usar el servicio API centralizado que maneja errores y caché
+        const userData = await apiService.get<User>(`/users/${userId}`);
 
-        const userRole = response.data.role?.nombre?.toLowerCase();
+        const userRole = userData.role?.nombre?.toLowerCase();
         if (userRole !== 'employee' && userRole !== 'admin') {
           showError('Acceso denegado', 'Esta página es solo para empleados y administradores');
           router.push('/');
@@ -125,28 +123,25 @@ function EmployeeAppointmentsScreen() {
 
       const userId = Number(userIdString);
 
-      // Obtenemos las citas
-      const appointmentsResponse = await axios.get(`${API_URL}/appointments?employeeId=${userId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // Obtenemos las citas usando el servicio API centralizado
+      const appointmentsData = await apiService.get<Appointment[]>(`/appointments?employeeId=${userId}`);
 
       // Para cada cita, obtenemos los datos del usuario cliente
       const appointmentsWithUserInfo = await Promise.all(
-        appointmentsResponse.data.map(async (appointment: Appointment) => {
+        appointmentsData.map(async (appointment: Appointment) => {
           try {
             if (!appointment.client?.id_user) {
               return appointment;
             }
 
-            const userResponse = await axios.get(`${API_URL}/users/${appointment.client.id_user}`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
+            // Usar el servicio API centralizado que maneja errores y caché
+            const userData = await apiService.get<User>(`/users/${appointment.client.id_user}`);
             
             return {
               ...appointment,
               client: {
                 ...appointment.client,
-                user: userResponse.data
+                user: userData
               }
             };
           } catch (error) {
@@ -245,27 +240,21 @@ function EmployeeAppointmentsScreen() {
 
   const updateAppointmentStatus = async (appointmentId: number, newStatus: AppointmentStatus) => {
     try {
-      const response = await axios.put(`${API_URL}/appointments/${appointmentId}`, {
+      // Usar el servicio API centralizado que maneja errores y caché
+      await apiService.put(`/appointments/${appointmentId}`, {
         status: newStatus
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          // Asegúrate de incluir el token de autorización si es necesario
-          'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
-        }
       });
 
-      if (response.status === 200) {
-        // Actualizar la lista de citas localmente
-        setAppointments(currentAppointments => 
-          currentAppointments.map(appointment => 
-            appointment.id === appointmentId 
-              ? { ...appointment, status: newStatus }
-              : appointment
-          )
-        );
-        showError('Éxito', 'Estado de la cita actualizado correctamente');
-      }
+      // Consideramos que la operación fue exitosa si no se lanzó ninguna excepción
+      // Actualizar la lista de citas localmente
+      setAppointments(currentAppointments => 
+        currentAppointments.map(appointment => 
+          appointment.id === appointmentId 
+            ? { ...appointment, status: newStatus }
+            : appointment
+        )
+      );
+      showError('Éxito', 'Estado de la cita actualizado correctamente');
     } catch (error) {
       console.error('Error al actualizar el estado de la cita:', error);
       showError('Error', 'No se pudo actualizar el estado de la cita');

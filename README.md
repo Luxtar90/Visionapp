@@ -1,50 +1,120 @@
-# Welcome to your Expo app 👋
+# Visionapp - Aplicación de Gestión de Servicios
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Visionapp es una aplicación React Native con Expo que permite la gestión de servicios, productos y citas. Utiliza una arquitectura modular con TypeScript para tipado estático, Redux para gestión de estado, y una estructura de servicios API centralizada.
 
-## Get started
+## Instalación y Ejecución
 
-1. Install dependencies
+1. Instalar dependencias
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. Iniciar la aplicación
 
    ```bash
-    npx expo start
+   npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+## Estructura del Proyecto
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Directorios Principales
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- **app/**: Contiene la lógica principal de la aplicación
+  - **(tabs)/**: Pantallas principales de la aplicación (tabs de navegación)
+  - **(admin)/**: Pantallas de administración
+  - **(auth)/**: Pantallas de autenticación
+  - **(profile)/**: Pantallas relacionadas con el perfil de usuario
+  - **components/**: Componentes específicos de la aplicación
+  - **constants/**: Constantes y configuraciones
+  - **contexts/**: Contextos de React (AuthContext, StoreContext)
 
-## Get a fresh project
+- **components/**: Componentes UI reutilizables
+  - **ui/**: Componentes UI de bajo nivel
+  - **__tests__/**: Pruebas de componentes
 
-When you're ready, run:
+- **config/**: Configuraciones globales
+  - **api.ts**: Configuración centralizada de API
 
-```bash
-npm run reset-project
-```
+- **hooks/**: Custom hooks de React
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+- **scripts/**: Scripts de utilidad para el proyecto
+  - **cleanup-project.js**: Script para limpiar archivos obsoletos
+  - **reset-project.js**: Script para reiniciar el proyecto
 
-## Learn more
+- **services/**: Servicios para interactuar con APIs externas
 
-To learn more about developing your project with Expo, look at the following resources:
+- **store/**: Configuración de Redux y slices
+  - **slices/**: Slices de Redux Toolkit (auth, booking, profile, etc.)
+  - **index.ts**: Configuración central del store
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **theme/**: Sistema de temas centralizado (colores, espaciado, tipografía)
 
-## Join the community
+- **types/**: Definiciones de tipos TypeScript
 
-Join our community of developers creating universal apps.
+- **utils/**: Funciones utilitarias
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Mejores Prácticas
+
+### Importaciones y Referencias
+
+- Usar siempre TypeScript para todos los archivos nuevos
+- Importar contextos desde app/contexts/
+- Importar el store desde store/index.ts
+- Mantener los componentes UI genéricos en /components y los específicos en /app/components
+
+### Componentes
+
+- Utilizar el sistema de temas centralizado para estilos
+- Aprovechar los componentes reutilizables (Button, Input, Card, etc.)
+- Seguir las convenciones de tipado para props
+- Utilizar interfaces para definir las props de los componentes
+
+### Estado y Gestión de Datos
+
+- Utilizar los contextos de React para estado local o específico de un árbol de componentes
+- Utilizar Redux Toolkit y sus slices para estado global persistente
+- Implementar validaciones de tipo para evitar errores en tiempo de ejecución
+
+## Cambios Recientes
+
+### Migración a TypeScript
+
+- Se han migrado todos los componentes JavaScript a TypeScript
+- Se han implementado slices de Redux Toolkit para reemplazar los reducers antiguos
+- Se han añadido definiciones de tipos para todas las interfaces y funciones
+
+### Reorganización del Proyecto
+
+- Se ha consolidado la estructura de carpetas, eliminando duplicidades
+- Se ha centralizado la gestión de estado en la carpeta `store`
+- Se ha eliminado la carpeta `context` obsoleta, usando `app/contexts` en su lugar
+- Se ha creado un script de limpieza para mantener el proyecto organizado
+
+### Sistema de Temas
+
+- Se utiliza un sistema de temas centralizado en `theme/index.ts`
+- Todos los componentes utilizan este sistema para mantener una apariencia consistente
+
+## Scripts de Utilidad
+
+### Scripts NPM
+
+- `npm start`: Inicia la aplicación con Expo
+- `npm run android`: Ejecuta la aplicación en Android
+- `npm run ios`: Ejecuta la aplicación en iOS
+- `npm run web`: Ejecuta la aplicación en web
+- `npm run lint`: Ejecuta el linting del código
+- `npm run reset-project`: Reinicia el proyecto a un estado en blanco
+
+### Scripts de Mantenimiento
+
+- `node scripts/cleanup-project.js`: Limpia archivos obsoletos y consolida la estructura del proyecto
+- `node scripts/fix-lint-issues.js`: Corrige automáticamente problemas comunes de linting
+- `node scripts/update-dependencies.js`: Verifica y actualiza las dependencias del proyecto
+
+## Recursos
+
+- [Expo documentation](https://docs.expo.dev/): Documentación oficial de Expo
+- [React Native documentation](https://reactnative.dev/): Documentación oficial de React Native
+- [Redux Toolkit](https://redux-toolkit.js.org/): Documentación oficial de Redux Toolkit
