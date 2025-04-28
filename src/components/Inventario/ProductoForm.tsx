@@ -196,7 +196,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Código"
-          value={formData.codigo}
+          value={formData.codigo || ''}
           onChangeText={(value) => handleChange('codigo', value)}
           placeholder="Ingrese el código del producto"
           error={errors.codigo}
@@ -207,7 +207,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Nombre"
-          value={formData.nombre}
+          value={formData.nombre || ''}
           onChangeText={(value) => handleChange('nombre', value)}
           placeholder="Ingrese el nombre del producto"
           error={errors.nombre}
@@ -218,7 +218,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Descripción"
-          value={formData.descripcion}
+          value={formData.descripcion || ''}
           onChangeText={(value) => handleChange('descripcion', value)}
           placeholder="Ingrese la descripción del producto"
           multiline
@@ -230,7 +230,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
         <View style={styles.formHalfGroup}>
           <FormField
             label="Precio de venta"
-            value={formData.precio?.toString()}
+            value={formData.precio?.toString() || ''}
             onChangeText={(value) => handleChange('precio', parseFloat(value) || 0)}
             placeholder="0.00"
             keyboardType="numeric"
@@ -242,7 +242,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
         <View style={styles.formHalfGroup}>
           <FormField
             label="Precio de compra"
-            value={formData.precio_compra?.toString()}
+            value={formData.precio_compra?.toString() || ''}
             onChangeText={(value) => handleChange('precio_compra', parseFloat(value) || 0)}
             placeholder="0.00"
             keyboardType="numeric"
@@ -268,7 +268,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
             <View style={styles.formHalfGroup}>
               <FormField
                 label="Stock actual"
-                value={formData.stock?.toString()}
+                value={formData.stock?.toString() || ''}
                 onChangeText={(value) => handleChange('stock', parseInt(value) || 0)}
                 placeholder="0"
                 keyboardType="numeric"
@@ -280,7 +280,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
             <View style={styles.formHalfGroup}>
               <FormField
                 label="Stock mínimo"
-                value={formData.stock_minimo?.toString()}
+                value={formData.stock_minimo?.toString() || ''}
                 onChangeText={(value) => handleChange('stock_minimo', parseInt(value) || 0)}
                 placeholder="0"
                 keyboardType="numeric"
@@ -293,7 +293,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           <View style={styles.formGroup}>
             <FormField
               label="Unidad de medida"
-              value={formData.unidad_medida}
+              value={formData.unidad_medida || ''}
               onChangeText={(value) => handleChange('unidad_medida', value)}
               placeholder="Ej: uds, kg, litros"
             />
@@ -302,7 +302,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           <View style={styles.formGroup}>
             <FormField
               label="Ubicación en almacén"
-              value={formData.ubicacion}
+              value={formData.ubicacion || ''}
               onChangeText={(value) => handleChange('ubicacion', value)}
               placeholder="Ej: Estante A, Pasillo 3"
             />
@@ -311,7 +311,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           <View style={styles.formGroup}>
             <FormField
               label="Código de barras"
-              value={formData.codigo_barras}
+              value={formData.codigo_barras || ''}
               onChangeText={(value) => handleChange('codigo_barras', value)}
               placeholder="Ingrese el código de barras"
             />

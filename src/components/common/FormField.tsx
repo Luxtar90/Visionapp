@@ -17,6 +17,7 @@ interface FormFieldProps {
   multiline?: boolean;
   numberOfLines?: number;
   editable?: boolean;
+  required?: boolean;
 }
 
 export const FormField = ({
@@ -32,6 +33,7 @@ export const FormField = ({
   multiline = false,
   numberOfLines = 1,
   editable = true,
+  required = false,
 }: FormFieldProps) => {
   return (
     <View style={styles.container}>

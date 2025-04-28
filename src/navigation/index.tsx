@@ -1,177 +1,197 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import useAuth from '../hooks/useAuth';
+
+// Navegadores
 import AuthStack from './AuthStack';
 import AdminTabNavigator from './AdminTabNavigator';
 import EmpleadoTabNavigator from './EmpleadoTabNavigator';
 import ClienteTabNavigator from './ClienteTabNavigator';
+
+// Pantallas
 import SeleccionarTiendaScreen from '../screens/Cliente/SeleccionarTiendaScreen';
-import { Usuario } from '../interfaces/Usuario';
 
-export default function Navigation() {
-  const { user, isAuthenticated, loading, token } = useAuth();
-  const [tiendaId, setTiendaId] = React.useState<string | null>(null);
-  const [initialLoadComplete, setInitialLoadComplete] = React.useState(false);
-  const [authChecked, setAuthChecked] = React.useState(false);
+// Contexto de autenticación
+import useAuth from '../hooks/useAuth';
 
-  // Para depuración - mostrar el estado actual de forma detallada
-  React.useEffect(() => {
-    console.log('[Navigation] Estado actual:', {
-      isAuthenticated,
-      tiendaId,
-      userRole: user?.rol || 'no definido',
-      initialLoadComplete,
-      authChecked,
-      userId: user?.id || 'no disponible',
-      userEmail: user?.email || 'no disponible',
-      tokenPresent: !!token
-    });
-  }, [isAuthenticated, user, tiendaId, initialLoadComplete, authChecked, token]);
+// Crear el stack de navegación principal
+const Stack = createNativeStackNavigator();
 
-  // Efecto para verificar el estado de autenticación al inicio
-  React.useEffect(() => {
-    const checkAuthState = async () => {
+// Componente para pantalla de carga
+const LoadingScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <ActivityIndicator size="large" color="#0000ff" />
+    <Text style={{ marginTop: 10 }}>Cargando...</Text>
+  </View>
+);
+
+// Componente de navegación principal
+const Navigation = () => {
+  // Estado para controlar la carga inicial
+  const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [selectedTienda, setSelectedTienda] = useState<string | null>(null);
+  
+  // Obtener el estado de autenticación del contexto
+  const { isAuthenticated, user, token, updateAuthState } = useAuth();
+  
+  // Cargar datos iniciales
+  useEffect(() => {
+    const loadInitialData = async () => {
       try {
-        // Verificar si hay un token guardado en AsyncStorage
-        const storedToken = await AsyncStorage.getItem('token');
-        console.log('[Navigation] Token en AsyncStorage:', storedToken ? 'Presente' : 'No encontrado');
+        console.log('[Navigation] Cargando datos iniciales...');
         
-        // Verificar si hay datos de usuario guardados
-        const storedUser = await AsyncStorage.getItem('@user');
-        console.log('[Navigation] Usuario en AsyncStorage:', storedUser ? 'Presente' : 'No encontrado');
-        
-        // Verificar si el estado de autenticación coincide con los datos almacenados
-        if (storedToken && storedUser && !isAuthenticated) {
-          console.log('[Navigation] Hay datos de sesión pero isAuthenticated es false');
-          console.log('[Navigation] Esto puede indicar que el contexto de autenticación no se ha inicializado correctamente');
+        // Verificar si hay una navegación pendiente
+        const pendingNavigation = await AsyncStorage.getItem('@pendingNavigation');
+        if (pendingNavigation) {
+          console.log('[Navigation] Navegación pendiente detectada:', pendingNavigation);
+          // Limpiar la bandera de navegación pendiente
+          await AsyncStorage.removeItem('@pendingNavigation');
         }
         
-        if (!storedToken && isAuthenticated) {
-          console.log('[Navigation] ADVERTENCIA: isAuthenticated es true pero no hay token guardado');
-        }
+        // Obtener token y datos de usuario de AsyncStorage
+        const storedToken = await AsyncStorage.getItem('@token');
+        const storedUserData = await AsyncStorage.getItem('@user');
+        const storedTienda = await AsyncStorage.getItem('selectedTienda');
         
-        setAuthChecked(true);
-      } catch (error) {
-        console.error('[Navigation] Error al verificar el estado de autenticación:', error);
-        setAuthChecked(true); // Marcamos como verificado aunque haya error
-      }
-    };
-    
-    checkAuthState();
-  }, [isAuthenticated]); // Solo se ejecuta cuando cambia isAuthenticated
-
-  // Efecto para cargar la tienda seleccionada cuando el usuario está autenticado
-  React.useEffect(() => {
-    console.log('[Navigation] Verificando estado de autenticación:', { 
-      isAuthenticated, 
-      user: user ? `${user.nombre} (${user.email})` : 'null',
-      authChecked
-    });
-    
-    const checkTienda = async () => {
-      try {
-        // Verificar si hay una tienda seleccionada
-        const storedTiendaId = await AsyncStorage.getItem('selectedTienda');
-        console.log('[Navigation] Tienda almacenada:', storedTiendaId || 'No encontrada');
+        console.log('[Navigation] Datos obtenidos de AsyncStorage:', {
+          token: storedToken ? 'Presente' : 'No presente',
+          userData: storedUserData ? 'Presente' : 'No presente',
+          tienda: storedTienda,
+          pendingNavigation
+        });
         
-        if (storedTiendaId) {
-          setTiendaId(storedTiendaId);
-        } else if (user && user.tiendaId) {
-          // Si no hay tienda guardada pero el usuario tiene una tienda asignada
-          const userTiendaId = String(user.tiendaId);
-          console.log(`[Navigation] Usando tienda del usuario: ${userTiendaId}`);
-          setTiendaId(userTiendaId);
-          await AsyncStorage.setItem('selectedTienda', userTiendaId);
+        // Actualizar el estado de tienda seleccionada
+        setSelectedTienda(storedTienda);
+        
+        // Si hay token y datos de usuario, actualizar el estado de autenticación
+        if (storedToken && storedUserData) {
+          try {
+            const userData = JSON.parse(storedUserData);
+            console.log('[Navigation] Actualizando estado de autenticación con datos:', {
+              id: userData.id,
+              nombre: userData.nombre,
+              email: userData.email,
+              rol: userData.rol
+            });
+            
+            // Actualizar el estado de autenticación
+            updateAuthState(storedToken, userData);
+          } catch (error) {
+            console.error('[Navigation] Error al parsear datos de usuario:', error);
+          }
         }
       } catch (error) {
-        console.error('[Navigation] Error al obtener la tienda:', error);
+        console.error('[Navigation] Error al cargar datos iniciales:', error);
       } finally {
-        // Marcar que la carga inicial ha terminado
+        // Marcar la carga inicial como completada
+        setLoading(false);
         setInitialLoadComplete(true);
       }
     };
     
-    if (isAuthenticated && user) {
-      console.log('[Navigation] Usuario autenticado, verificando tienda seleccionada');
-      checkTienda();
-    } else {
-      // Si no está autenticado, también completamos la carga inicial
-      console.log('[Navigation] Usuario no autenticado, mostrando pantalla de login');
-      setInitialLoadComplete(true);
+    // Cargar datos iniciales
+    loadInitialData();
+  }, []);
+  
+  // Efecto para monitorear cambios en el estado de autenticación
+  useEffect(() => {
+    if (initialLoadComplete) {
+      console.log('[Navigation] Estado de autenticación actualizado:', {
+        isAuthenticated,
+        userRole: user?.rol,
+        selectedTienda
+      });
+    }
+  }, [isAuthenticated, user, initialLoadComplete, selectedTienda]);
+  
+  // Función para determinar qué navegador mostrar según el rol del usuario
+  const getRoleNavigator = (rol: string | undefined) => {
+    console.log('[Navigation] Seleccionando navegador para rol:', rol || 'no definido');
+    
+    // Si el rol no está definido, asumimos que es cliente (comportamiento por defecto)
+    if (!rol) {
+      console.log('[Navigation] Rol no definido, usando navegador de cliente por defecto');
+      return <ClienteTabNavigator />;
     }
     
-    // Timeout de seguridad para evitar que se quede cargando indefinidamente
-    const safetyTimeout = setTimeout(() => {
-      if (!initialLoadComplete) {
-        console.log('[Navigation] Timeout de seguridad activado');
-        setInitialLoadComplete(true);
-      }
-    }, 3000); // 3 segundos máximo de espera
+    // Map roles to their respective navigators
+    const rolLowerCase = rol.toLowerCase();
+    console.log('[Navigation] Rol en minúsculas:', rolLowerCase);
     
-    return () => clearTimeout(safetyTimeout);
-  }, [isAuthenticated, user, authChecked]);
-
-  // Mostrar pantalla de carga solo durante la carga inicial y por un tiempo limitado
-  if (loading && !initialLoadComplete) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text style={{ marginTop: 10 }}>Cargando...</Text>
-      </View>
-    );
-  }
-
-  // Determinar qué pantalla mostrar basado en el estado de autenticación
-  const renderScreen = () => {
-    // Si el usuario no está autenticado, mostrar pantalla de login/registro
-    if (!isAuthenticated) {
-      console.log('[Navigation] Renderizando AuthStack (no autenticado)');
-      return <AuthStack />;
+    // Según la memoria del proyecto, estos son los mapeos de roles:
+    // - "admin" o "administrador" → AdminTabNavigator
+    // - "empleado" o "vendedor" → EmpleadoTabNavigator
+    // - "cliente" o "user" → ClienteTabNavigator
+    switch (rolLowerCase) {
+      case 'admin':
+      case 'administrador':
+        console.log('[Navigation] Usando navegador de administrador');
+        return <AdminTabNavigator />;
+      case 'empleado':
+      case 'vendedor':
+        console.log('[Navigation] Usando navegador de empleado');
+        return <EmpleadoTabNavigator />;
+      case 'cliente':
+      case 'user':  
+        console.log('[Navigation] Usando navegador de cliente');
+        return <ClienteTabNavigator />;
+      default:
+        console.log('[Navigation] Rol desconocido:', rolLowerCase);
+        console.log('[Navigation] Usando navegador de cliente por defecto');
+        return <ClienteTabNavigator />;
     }
-    
-    // Si el usuario está autenticado pero no tiene tienda seleccionada
-    if (!tiendaId) {
-      console.log('[Navigation] Renderizando SeleccionarTiendaScreen (sin tienda)');
-      return <SeleccionarTiendaScreen />;
-    }
-    
-    // Si el usuario está autenticado y tiene tienda, mostrar navegador según rol
-    console.log('[Navigation] Renderizando navegador para rol:', user?.rol || 'no definido');
-    return getRoleNavigator(user?.rol);
   };
   
+  // Renderizar la pantalla según el estado de autenticación
+  const renderScreen = () => {
+    // Si está cargando, mostrar pantalla de carga
+    if (loading) {
+      console.log('[Navigation] Mostrando pantalla de carga');
+      return <LoadingScreen />;
+    }
+    
+    console.log('[Navigation] Determinando qué pantalla mostrar...');
+    console.log('[Navigation] Estado de autenticación:', isAuthenticated);
+    console.log('[Navigation] Usuario:', user ? `ID: ${user.id}, Rol: ${user.rol}` : 'No hay usuario');
+    console.log('[Navigation] Tienda seleccionada:', selectedTienda);
+    
+    // Verificar si el usuario está autenticado
+    if (isAuthenticated && token && user) {
+      console.log('[Navigation] Usuario autenticado');
+      
+      // Verificar si hay una tienda seleccionada
+      if (selectedTienda) {
+        console.log('[Navigation] Tienda seleccionada, mostrando navegador según rol');
+        
+        // Mostrar el navegador según el rol del usuario
+        return getRoleNavigator(user.rol);
+      } else {
+        console.log('[Navigation] No hay tienda seleccionada, mostrando pantalla de selección de tienda');
+        
+        // Si no hay tienda seleccionada, mostrar pantalla de selección de tienda
+        return (
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="SeleccionarTienda" component={SeleccionarTiendaScreen} />
+          </Stack.Navigator>
+        );
+      }
+    } else {
+      console.log('[Navigation] Usuario no autenticado, mostrando stack de autenticación');
+      
+      // Si no está autenticado, mostrar stack de autenticación
+      return <AuthStack />;
+    }
+  };
+  
+  // Renderizar el contenedor de navegación
   return (
     <NavigationContainer>
       {renderScreen()}
     </NavigationContainer>
   );
-}
-
-// Función para determinar qué navegador mostrar según el rol del usuario
-const getRoleNavigator = (rol: string | undefined) => {
-  console.log('[Navigation] Seleccionando navegador para rol:', rol || 'no definido');
-  
-  // Si el rol no está definido, asumimos que es cliente (comportamiento por defecto)
-  if (!rol) {
-    console.log('[Navigation] Rol no definido, usando navegador de cliente por defecto');
-    return <ClienteTabNavigator />;
-  }
-  
-  // Map roles to their respective navigators
-  switch (rol) {
-    case 'admin':
-      console.log('[Navigation] Usando navegador de administrador');
-      return <AdminTabNavigator />;
-    case 'empleado':
-      console.log('[Navigation] Usando navegador de empleado');
-      return <EmpleadoTabNavigator />;
-    case 'cliente':
-      console.log('[Navigation] Usando navegador de cliente');
-      return <ClienteTabNavigator />;
-    default:
-      console.log('[Navigation] Rol desconocido, usando navegador de cliente por defecto');
-      return <ClienteTabNavigator />;
-  }
 };
+
+export default Navigation;

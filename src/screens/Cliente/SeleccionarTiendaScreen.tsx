@@ -10,23 +10,67 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
-import { getTiendasByUsuario } from '../../api/tiendas.api';
+import { useAuth } from '../../hooks/useAuth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { colors } from '../../theme/colors';
-import { Tienda } from '../../interfaces/Tienda';
+
+// Interfaz para la estructura de tienda según la respuesta de la API
+interface Tienda {
+  id: number;
+  nombre: string;
+  direccion: string;
+  telefono: string;
+  email_contacto: string;
+  fecha_registro: string;
+}
+
+// Interfaz para la respuesta paginada de la API
+interface TiendasResponse {
+  items: Tienda[];
+  total: number;
+}
 
 export default function SeleccionarTiendaScreen() {
   const [tiendas, setTiendas] = useState<Tienda[]>([]);
   const [loading, setLoading] = useState(true);
-  const { selectTienda, logout } = useAuth();
+  const { logout } = useAuth();
+  
+  // URL base para las solicitudes a la API
+  const baseURL = 'http://10.0.2.2:3001';
 
   useEffect(() => {
     const fetchTiendas = async () => {
       try {
-        const data = await getTiendasByUsuario();
-        setTiendas(data);
+        setLoading(true);
+        
+        // Obtener el token de autenticación
+        const token = await AsyncStorage.getItem('@token');
+        
+        if (!token) {
+          console.error('[SeleccionarTiendaScreen] No se encontró token de autenticación');
+          Alert.alert('Error', 'No se pudo autenticar. Por favor inicie sesión nuevamente.');
+          setLoading(false);
+          return;
+        }
+        
+        console.log('[SeleccionarTiendaScreen] Obteniendo tiendas de la API...');
+        
+        // Realizar la solicitud con el token de autenticación
+        const response = await axios.get<TiendasResponse>(`${baseURL}/tiendas?limit=0&offset=0`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': '*/*'
+          }
+        });
+        
+        console.log('[SeleccionarTiendaScreen] Tiendas obtenidas:', response.data.items.length);
+        
+        // Actualizar el estado con las tiendas obtenidas
+        setTiendas(response.data.items);
       } catch (error) {
-        console.error('Error fetching tiendas:', error);
+        console.error('[SeleccionarTiendaScreen] Error al obtener tiendas:', error);
         Alert.alert(
           'Error',
           'No se pudieron cargar las tiendas. Por favor intente nuevamente.'
@@ -39,13 +83,24 @@ export default function SeleccionarTiendaScreen() {
     fetchTiendas();
   }, []);
 
-  const handleSelectTienda = async (tiendaId: string) => {
+  const handleSelectTienda = async (tienda: Tienda) => {
     try {
-      // Convertir tiendaId a número ya que selectTienda espera un number
-      await selectTienda(Number(tiendaId));
-      // No need to navigate, the Navigation component will handle this
+      console.log('[SeleccionarTiendaScreen] Seleccionando tienda:', tienda.id);
+      
+      // Guardar el ID de la tienda seleccionada en AsyncStorage
+      await AsyncStorage.setItem('selectedTienda', tienda.id.toString());
+      
+      // Mostrar mensaje de éxito
+      Alert.alert(
+        'Tienda Seleccionada',
+        `Has seleccionado la tienda "${tienda.nombre}".`,
+        [{ text: 'Continuar' }]
+      );
+      
+      // No es necesario navegar, el componente Navigation se encargará de esto
+      // basado en la presencia de 'selectedTienda' en AsyncStorage
     } catch (error) {
-      console.error('Error selecting tienda:', error);
+      console.error('[SeleccionarTiendaScreen] Error al seleccionar tienda:', error);
       Alert.alert(
         'Error',
         'No se pudo seleccionar la tienda. Por favor intente nuevamente.'
@@ -57,7 +112,7 @@ export default function SeleccionarTiendaScreen() {
     try {
       await logout();
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error('[SeleccionarTiendaScreen] Error al cerrar sesión:', error);
     }
   };
 
@@ -73,7 +128,7 @@ export default function SeleccionarTiendaScreen() {
   if (tiendas.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No tienes tiendas asignadas.</Text>
+        <Text style={styles.emptyText}>No hay tiendas disponibles.</Text>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
         </TouchableOpacity>
@@ -90,20 +145,22 @@ export default function SeleccionarTiendaScreen() {
           resizeMode="contain"
         />
         <Text style={styles.title}>Selecciona una Tienda</Text>
+        <Text style={styles.subtitle}>Elige la tienda donde deseas realizar tus reservas</Text>
       </View>
 
       <FlatList
         data={tiendas}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.tiendaItem}
-            onPress={() => handleSelectTienda(item.id)}
+            onPress={() => handleSelectTienda(item)}
           >
             <View style={styles.tiendaContent}>
               <Text style={styles.tiendaNombre}>{item.nombre}</Text>
               <Text style={styles.tiendaDireccion}>{item.direccion}</Text>
               <Text style={styles.tiendaContacto}>{item.telefono}</Text>
+              <Text style={styles.tiendaEmail}>{item.email_contacto}</Text>
             </View>
             <View style={styles.arrowContainer}>
               <Text style={styles.arrow}>›</Text>
@@ -139,27 +196,38 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.primary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: colors.text,
+    textAlign: 'center',
     marginBottom: 20,
   },
   listContainer: {
     flexGrow: 1,
   },
   tiendaItem: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f9f9f9',
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   tiendaContent: {
     flex: 1,
   },
   tiendaNombre: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: colors.primary,
     marginBottom: 4,
   },
@@ -171,6 +239,12 @@ const styles = StyleSheet.create({
   tiendaContacto: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 2,
+  },
+  tiendaEmail: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
   arrowContainer: {
     paddingLeft: 8,
@@ -202,14 +276,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   logoutButton: {
-    backgroundColor: colors.error,
-    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
     padding: 15,
+    borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
   },
   logoutButtonText: {
-    color: '#fff',
+    color: '#333',
     fontSize: 16,
     fontWeight: '600',
   },

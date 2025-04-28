@@ -24,6 +24,7 @@ interface DatePickerFieldProps {
   mode?: 'date' | 'time' | 'datetime';
   minDate?: Date;
   maxDate?: Date;
+  required?: boolean;
 }
 
 export const DatePickerField = ({
@@ -37,6 +38,7 @@ export const DatePickerField = ({
   mode = 'date',
   minDate,
   maxDate,
+  required,
 }: DatePickerFieldProps) => {
   const [showPicker, setShowPicker] = useState(false);
   
@@ -99,7 +101,7 @@ export const DatePickerField = ({
               onChange={handleChange}
               minimumDate={minDate}
               maximumDate={maxDate}
-              locale="es-ES"
+              // Removing locale property as it's not supported in DateTimePickerProps
             />
           </View>
         </SafeAreaView>

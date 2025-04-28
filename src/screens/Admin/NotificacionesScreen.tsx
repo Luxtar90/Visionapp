@@ -30,7 +30,8 @@ import {
 } from '../../api/notificaciones.api';
 import { 
   Notificacion, 
-  FiltrosNotificaciones as FiltrosNotificacionesType 
+  FiltrosNotificaciones as FiltrosNotificacionesType,
+  EstadoNotificacion
 } from '../../interfaces/Notificacion';
 import { useAuth } from '../../hooks/useAuth';
 import { useTienda } from '../../hooks/useTienda';
@@ -219,8 +220,8 @@ export const NotificacionesScreen: React.FC = () => {
           const nuevaNotificacion = {
             ...data,
             tienda_id: tiendaActual.id,
-            creador_id: user.id,
-            estado: 'pendiente',
+            creador_id: String(user.id),
+            estado: 'pendiente' as EstadoNotificacion,
           };
           await createNotificacion(nuevaNotificacion);
           setStatusMessage({

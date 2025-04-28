@@ -241,12 +241,13 @@ export const NotificacionForm: React.FC<NotificacionFormProps> = ({
     if (accionTipo === 'ninguna') return null;
     
     let placeholder = '';
-    let keyboardType: 'default' | 'url' | 'phone-pad' = 'default';
+    let keyboardType: 'default' | 'email-address' | 'phone-pad' = 'default';
     
     switch (accionTipo) {
       case 'url':
         placeholder = 'https://ejemplo.com';
-        keyboardType = 'url';
+        // Changed from 'url' to 'default' as 'url' is not a valid keyboardType
+        keyboardType = 'default';
         break;
       case 'pantalla':
         placeholder = 'NombrePantalla';
@@ -282,7 +283,7 @@ export const NotificacionForm: React.FC<NotificacionFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Título"
-          value={formData.titulo}
+          value={formData.titulo || ''}
           onChangeText={(value) => handleChange('titulo', value)}
           placeholder="Ingrese el título de la notificación"
           error={errors.titulo}
@@ -293,7 +294,7 @@ export const NotificacionForm: React.FC<NotificacionFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Mensaje"
-          value={formData.mensaje}
+          value={formData.mensaje || ''}
           onChangeText={(value) => handleChange('mensaje', value)}
           placeholder="Ingrese el mensaje de la notificación"
           multiline

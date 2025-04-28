@@ -38,28 +38,48 @@ export default function PerfilScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // Simular carga de datos
+    // Cargar los datos del perfil del usuario autenticado
     const fetchProfile = async () => {
       try {
-        // Aquí se llamaría a la API para obtener el perfil del usuario
-        // const response = await getUserProfile();
+        setLoading(true);
+        console.log('[PerfilScreen] Cargando datos del perfil...');
         
-        // Datos de ejemplo
-        const mockData: UserProfile = {
-          id: '123456',
-          nombre: 'Juan',
-          apellido: 'Pérez',
-          email: 'juan.perez@example.com',
-          telefono: '555-123-4567',
-          direccion: 'Calle Principal 123, Ciudad',
-          fecha_nacimiento: '1990-05-15',
-          avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-        };
+        // Obtener los datos del usuario desde AsyncStorage
+        const userData = await AsyncStorage.getItem('@user');
         
-        setProfile(mockData);
-        setEditedProfile(mockData);
+        if (userData) {
+          const user = JSON.parse(userData);
+          console.log('[PerfilScreen] Datos de usuario obtenidos:', {
+            id: user.id,
+            nombre: user.nombre,
+            email: user.email,
+            rol: user.rol
+          });
+          
+          // Crear objeto de perfil con los datos del usuario
+          const userProfile: UserProfile = {
+            id: user.id.toString(),
+            nombre: user.nombre || '',
+            apellido: user.apellido || '',
+            email: user.email || '',
+            telefono: user.telefono || '',
+            direccion: user.direccion || '',
+            fecha_nacimiento: user.fecha_nacimiento || '',
+            avatar: user.avatar || undefined,
+          };
+          
+          setProfile(userProfile);
+          setEditedProfile(userProfile);
+          console.log('[PerfilScreen] Perfil cargado correctamente');
+        } else {
+          console.error('[PerfilScreen] No se encontraron datos de usuario en AsyncStorage');
+          Alert.alert(
+            'Error',
+            'No se pudo cargar la información del perfil. Por favor inicie sesión nuevamente.'
+          );
+        }
       } catch (error) {
-        console.error('Error fetching profile:', error);
+        console.error('[PerfilScreen] Error al cargar el perfil:', error);
         Alert.alert(
           'Error',
           'No se pudo cargar la información del perfil. Por favor intente nuevamente.'

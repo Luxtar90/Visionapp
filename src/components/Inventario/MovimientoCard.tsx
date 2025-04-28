@@ -14,7 +14,7 @@ export const MovimientoCard: React.FC<MovimientoCardProps> = ({
   movimiento,
   onPress,
 }) => {
-  const getTipoIcon = (tipo: string): string => {
+  const getTipoIcon = (tipo: string): any => {
     switch (tipo) {
       case 'entrada':
         return 'arrow-down';

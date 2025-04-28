@@ -28,7 +28,8 @@ class ApiConfigManager {
     'http://10.0.2.2:3001',
     'http://localhost:3001',
     'http://192.168.1.100:3001',
-    'http://192.168.0.100:3001'
+    'http://192.168.0.100:3001',
+    'http://127.0.0.1:3001'
   ];
 
   // URLs de la API para diferentes entornos
@@ -158,6 +159,18 @@ const apiLogger = ApiLogger.getInstance();
 console.log('[API] Configurando URL base fija para el backend: http://10.0.2.2:3001');
 apiConfig.setCustomUrl('http://10.0.2.2:3001');
 
+// Mostrar todas las URLs alternativas para depuración
+console.log('[API] URLs alternativas disponibles:');
+[
+  'http://10.0.2.2:3001',
+  'http://localhost:3001',
+  'http://192.168.1.100:3001',
+  'http://192.168.0.100:3001',
+  'http://127.0.0.1:3001'
+].forEach(url => {
+  console.log(`[API] - ${url}`);
+});
+
 // Crear el cliente Axios con la configuración
 export const client = axios.create(apiConfig.getConfig());
 
@@ -170,8 +183,8 @@ console.log(`[API] Timeout: ${apiConfig.getConfig().timeout}ms`);
 client.interceptors.request.use(async config => {
   try {
     // Agregar token de autenticación si existe
-    // Usamos la clave 'token' que es la que se usa en AuthContext.tsx
-    const token = await AsyncStorage.getItem('token');
+    // Usamos la clave '@token' que es la que se usa en AuthContext.tsx
+    const token = await AsyncStorage.getItem('@token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       console.log('[API] Token agregado a la solicitud');

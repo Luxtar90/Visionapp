@@ -414,9 +414,9 @@ export const InventarioScreen: React.FC = () => {
                 onSubmit={handleSubmitMovimientoForm}
                 onCancel={() => setShowMovimientoForm(false)}
                 isLoading={formLoading}
-                tiendaId={tiendaActual.id}
-                usuarioId={user.id}
-                usuarioNombre={`${user.nombre} ${user.apellido}`}
+                tiendaId={String(tiendaActual.id)}
+                usuarioId={String(user.id)}
+                usuarioNombre={String(user.nombre)}
               />
             )}
           </View>

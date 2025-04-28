@@ -217,7 +217,7 @@ export const MovimientoForm: React.FC<MovimientoFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Cantidad"
-          value={formData.cantidad?.toString()}
+          value={formData.cantidad?.toString() || ''}
           onChangeText={(value) => handleChange('cantidad', parseInt(value) || 0)}
           placeholder="Ingrese la cantidad"
           keyboardType="numeric"
@@ -241,7 +241,7 @@ export const MovimientoForm: React.FC<MovimientoFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Motivo"
-          value={formData.motivo}
+          value={formData.motivo || ''}
           onChangeText={(value) => handleChange('motivo', value)}
           placeholder="Ingrese el motivo del movimiento"
           multiline
@@ -255,7 +255,7 @@ export const MovimientoForm: React.FC<MovimientoFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Documento de referencia (opcional)"
-          value={formData.documento_referencia}
+          value={formData.documento_referencia || ''}
           onChangeText={(value) => handleChange('documento_referencia', value)}
           placeholder="Ej: Factura #123, Orden #456"
         />
@@ -266,7 +266,7 @@ export const MovimientoForm: React.FC<MovimientoFormProps> = ({
           <View style={styles.formGroup}>
             <FormField
               label="Costo unitario"
-              value={formData.costo_unitario?.toString()}
+              value={formData.costo_unitario?.toString() || ''}
               onChangeText={(value) => handleChange('costo_unitario', parseFloat(value) || 0)}
               placeholder="0.00"
               keyboardType="numeric"

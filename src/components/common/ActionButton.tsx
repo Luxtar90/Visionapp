@@ -40,61 +40,41 @@ export const ActionButton = ({
   // Usar isLoading como fallback si loading no está definido
   const isButtonLoading = loading || isLoading;
   const getButtonStyle = () => {
-    const baseStyle = [styles.button];
+    const baseStyle = styles.button;
     
     if (fullWidth) {
-      baseStyle.push(styles.fullWidth);
+      return [baseStyle, styles.fullWidth];
     }
     
     switch (buttonVariant) {
       case 'primary':
-        baseStyle.push(styles.primaryButton);
-        break;
+        return [baseStyle, styles.primaryButton];
       case 'secondary':
-        baseStyle.push(styles.secondaryButton);
-        break;
+        return [baseStyle, styles.secondaryButton];
       case 'danger':
-        baseStyle.push(styles.dangerButton);
-        break;
+        return [baseStyle, styles.dangerButton];
       case 'success':
-        baseStyle.push(styles.successButton);
-        break;
+        return [baseStyle, styles.successButton];
+      default:
+        return baseStyle;
     }
-    
-    if (disabled || isButtonLoading) {
-      baseStyle.push(styles.disabledButton);
-    }
-    
-    if (style) {
-      baseStyle.push(style);
-    }
-    
-    return baseStyle;
   };
   
   const getTextStyle = () => {
-    const baseStyle = [styles.buttonText];
+    const baseStyle = styles.buttonText;
     
     switch (buttonVariant) {
       case 'primary':
-        baseStyle.push(styles.primaryText);
-        break;
+        return [baseStyle, styles.primaryText];
       case 'secondary':
-        baseStyle.push(styles.secondaryText);
-        break;
+        return [baseStyle, styles.secondaryText];
       case 'danger':
-        baseStyle.push(styles.dangerText);
-        break;
+        return [baseStyle, styles.dangerText];
       case 'success':
-        baseStyle.push(styles.successText);
-        break;
+        return [baseStyle, styles.successText];
+      default:
+        return baseStyle;
     }
-    
-    if (disabled || isButtonLoading) {
-      baseStyle.push(styles.disabledText);
-    }
-    
-    return baseStyle;
   };
   
   const getIconColor = () => {
@@ -118,7 +98,7 @@ export const ActionButton = ({
   
   return (
     <TouchableOpacity
-      style={getButtonStyle()}
+      style={[getButtonStyle(), disabled || isButtonLoading ? styles.disabledButton : null, style]}
       onPress={onPress}
       disabled={disabled || isButtonLoading}
       activeOpacity={0.8}
@@ -138,7 +118,7 @@ export const ActionButton = ({
               style={styles.icon} 
             />
           )}
-          <Text style={getTextStyle()}>{buttonLabel}</Text>
+          <Text style={[getTextStyle(), disabled || isButtonLoading ? styles.disabledText : null]}>{buttonLabel}</Text>
         </>
       )}
     </TouchableOpacity>

@@ -22,7 +22,7 @@ export const NotificacionCard: React.FC<NotificacionCardProps> = ({
   onEliminar,
   mostrarAcciones = true,
 }) => {
-  const getIconoTipo = (tipo: TipoNotificacion): string => {
+  const getIconoTipo = (tipo: TipoNotificacion): any => {
     switch (tipo) {
       case 'informativa':
         return 'information-circle';

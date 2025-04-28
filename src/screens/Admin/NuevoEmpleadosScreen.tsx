@@ -144,7 +144,8 @@ export default function EmpleadosScreen() {
       setIsLoading(true);
       
       if (tiendaId) {
-        data.tienda_id = tiendaId;
+        // Use type assertion to tell TypeScript this is valid
+        (data as any).tienda_id = tiendaId;
       }
       
       await createEmpleado(data);

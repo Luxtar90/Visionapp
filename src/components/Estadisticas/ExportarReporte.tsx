@@ -97,6 +97,7 @@ export const ExportarReporte: React.FC<ExportarReporteProps> = ({ filtros }) => 
             <View style={styles.formContainer}>
               <Text style={styles.label}>Tipo de reporte</Text>
               <SelectField
+                label="Tipo de reporte"
                 value={tipoReporte}
                 options={getTipoReporteOptions()}
                 onValueChange={(value) => setTipoReporte(value as any)}
@@ -105,6 +106,7 @@ export const ExportarReporte: React.FC<ExportarReporteProps> = ({ filtros }) => 
 
               <Text style={[styles.label, { marginTop: 16 }]}>Formato</Text>
               <SelectField
+                label="Formato"
                 value={formatoReporte}
                 options={getFormatoReporteOptions()}
                 onValueChange={(value) => setFormatoReporte(value as any)}

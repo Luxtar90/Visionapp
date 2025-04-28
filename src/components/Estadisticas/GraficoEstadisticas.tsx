@@ -96,6 +96,8 @@ export const GraficoEstadisticas: React.FC<GraficoEstadisticasProps> = ({
               withInnerLines={false}
               withHorizontalLabels={mostrarValores}
               withVerticalLabels={mostrarEtiquetas}
+              yAxisLabel=""
+              yAxisSuffix=""
             />
           </ScrollView>
         );

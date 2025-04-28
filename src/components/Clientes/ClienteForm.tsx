@@ -52,26 +52,26 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
     }
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    // Validaciones
-    if (!formData.nombre?.trim()) {
-      newErrors.nombre = 'El nombre es obligatorio';
+    // Validaciones básicas
+    if (!formData.nombre) {
+      newErrors.nombre = 'El nombre es requerido';
     }
     
-    if (!formData.apellido?.trim()) {
-      newErrors.apellido = 'El apellido es obligatorio';
+    if (!formData.apellido) {
+      newErrors.apellido = 'El apellido es requerido';
     }
     
-    if (!formData.email?.trim()) {
-      newErrors.email = 'El email es obligatorio';
-    } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
+    if (!formData.email) {
+      newErrors.email = 'El email es requerido';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'El email no es válido';
     }
     
-    if (!formData.telefono?.trim()) {
-      newErrors.telefono = 'El teléfono es obligatorio';
+    if (!formData.telefono) {
+      newErrors.telefono = 'El teléfono es requerido';
     }
     
     setErrors(newErrors);
@@ -80,12 +80,12 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
 
   const handleSubmit = () => {
     if (validateForm()) {
-      onSubmit(formData);
-    } else {
-      setStatusMessage({
-        type: 'error',
-        message: 'Por favor, corrige los errores en el formulario'
-      });
+      try {
+        onSubmit(formData);
+        setStatusMessage({ type: 'success', message: 'Cliente guardado correctamente' });
+      } catch (error) {
+        setStatusMessage({ type: 'error', message: 'Error al guardar el cliente' });
+      }
     }
   };
 
@@ -108,7 +108,7 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Nombre"
-          value={formData.nombre}
+          value={formData.nombre || ''}
           onChangeText={(value) => handleChange('nombre', value)}
           placeholder="Ingrese el nombre"
           error={errors.nombre}
@@ -119,7 +119,7 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Apellido"
-          value={formData.apellido}
+          value={formData.apellido || ''}
           onChangeText={(value) => handleChange('apellido', value)}
           placeholder="Ingrese el apellido"
           error={errors.apellido}
@@ -130,7 +130,7 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Email"
-          value={formData.email}
+          value={formData.email || ''}
           onChangeText={(value) => handleChange('email', value)}
           placeholder="Ingrese el email"
           keyboardType="email-address"
@@ -143,7 +143,7 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Teléfono"
-          value={formData.telefono}
+          value={formData.telefono || ''}
           onChangeText={(value) => handleChange('telefono', value)}
           placeholder="Ingrese el teléfono"
           keyboardType="phone-pad"
@@ -155,7 +155,7 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Dirección"
-          value={formData.direccion}
+          value={formData.direccion || ''}
           onChangeText={(value) => handleChange('direccion', value)}
           placeholder="Ingrese la dirección"
           multiline
@@ -165,7 +165,7 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <DatePickerField
           label="Fecha de nacimiento"
-          value={formData.fecha_nacimiento ? new Date(formData.fecha_nacimiento) : undefined}
+          value={formData.fecha_nacimiento ? new Date(formData.fecha_nacimiento) : null}
           onChange={(date) => handleChange('fecha_nacimiento', date?.toISOString())}
           placeholder="Seleccione la fecha de nacimiento"
           mode="date"
@@ -175,17 +175,18 @@ export const ClienteForm: React.FC<ClienteFormProps> = ({
       <View style={styles.formGroup}>
         <SelectField
           label="Género"
-          value={formData.genero}
+          value={formData.genero || ''}
           options={generoOptions}
           onValueChange={(value) => handleChange('genero', value)}
           placeholder="Seleccione el género"
+          icon="person-outline"
         />
       </View>
       
       <View style={styles.formGroup}>
         <FormField
           label="Notas"
-          value={formData.notas}
+          value={formData.notas || ''}
           onChangeText={(value) => handleChange('notas', value)}
           placeholder="Ingrese notas adicionales"
           multiline

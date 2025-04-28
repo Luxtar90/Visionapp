@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { authApi, Usuario as AuthUsuario, LoginResponse } from '../api/auth.api';
 
 /**
@@ -19,6 +20,7 @@ interface AuthContextProps {
   tiendaId: number | null;
   isAuthenticated: boolean;
   loading: boolean;
+  authReady: boolean;
   
   // Funciones básicas de autenticación
   login: (email: string, password: string) => Promise<void>;
@@ -26,7 +28,7 @@ interface AuthContextProps {
     nombre: string; 
     email: string; 
     telefono?: string;
-  }, password: string, tiendaId?: number) => Promise<void>;
+  }, password: string, tiendaId?: number) => Promise<LoginResponse>;
   logout: () => Promise<void>;
   
   // Funciones de gestión de tienda
@@ -35,6 +37,7 @@ interface AuthContextProps {
   // Funciones de utilidad
   updateUser: (userData: Partial<AuthUsuario>) => Promise<void>;
   checkConnection: () => Promise<boolean>;
+  updateAuthState: (tokenValue: string, userData: AuthUsuario) => void;
 }
 // Crear el contexto con valores por defecto
 const AuthContext = createContext<AuthContextProps>({
@@ -43,12 +46,19 @@ const AuthContext = createContext<AuthContextProps>({
   tiendaId: null,
   isAuthenticated: false,
   loading: true,
+  authReady: false,
   login: async () => {},
-  register: async () => {},
+  register: async () => ({ 
+    accessToken: '', 
+    tokenType: '', 
+    expiresIn: 0, 
+    usuario: { id: 0, nombre: '', email: '', rol: '', tiendaId: 1 } 
+  }),
   logout: async () => {},
   selectTienda: async () => {},
   updateUser: async () => {},
   checkConnection: async () => false,
+  updateAuthState: () => {}
 });
   
 /**
@@ -61,92 +71,87 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [tiendaId, setTiendaId] = useState<number | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
 
-  // Cargar datos de usuario al iniciar la aplicación
+  // Efecto para cargar los datos de usuario al inicio
   useEffect(() => {
-    // Iniciar la carga de datos
-    loadUserData();
-    
-    // Timeout de seguridad para evitar que la pantalla se quede cargando indefinidamente
-    const safetyTimeout = setTimeout(() => {
-      if (loading) {
-        console.log('[AuthContext] Timeout de seguridad activado para evitar carga indefinida');
-        setLoading(false);
-      }
-    }, 5000); // 5 segundos máximo de carga
-    
-    return () => clearTimeout(safetyTimeout);
-  }, []);
-
-  /**
-   * Carga los datos del usuario desde el almacenamiento local
-   */
-  const loadUserData = async () => {
-    console.log('[AuthContext] Cargando datos de usuario desde almacenamiento local');
-    setLoading(true);
-    
-    try {
-      // Obtener token
-      const storedToken = await AsyncStorage.getItem('token');
-      console.log('[AuthContext] Token almacenado:', storedToken ? 'Existe' : 'No existe');
-      
-      if (storedToken) {
-        setToken(storedToken);
-        setIsAuthenticated(true);
+    const loadUserData = async () => {
+      try {
+        console.log('[AuthContext] Cargando datos de usuario desde AsyncStorage...');
         
-        // Obtener datos de usuario
-        try {
-          // Primero intentamos cargar desde AsyncStorage
-          const storedUser = await AsyncStorage.getItem('@user');
-          if (storedUser) {
-            const userData = JSON.parse(storedUser);
-            setUser(userData);
-            console.log('[AuthContext] Usuario cargado desde almacenamiento local');
-          } else {
-            // Si no hay datos en AsyncStorage, los obtenemos del servidor
-            try {
-              const userData = await authApi.fetchMe();
-              setUser(userData);
-              console.log('[AuthContext] Usuario cargado desde el servidor');
-            } catch (fetchError) {
-              console.error('[AuthContext] Error al obtener usuario del servidor:', fetchError);
-              // Si falla la obtención del servidor, mantenemos el estado de autenticación pero sin datos de usuario
-            }
-          }
+        // Obtener token de AsyncStorage
+        const storedToken = await AsyncStorage.getItem('@token');
+        console.log('[AuthContext] Token almacenado:', storedToken ? 'Existe' : 'No existe');
+        
+        if (storedToken) {
+          // Establecer el token en el estado
+          setToken(storedToken);
           
-          // Obtener tienda seleccionada
-          const storedTienda = await AsyncStorage.getItem('tiendaId');
-          if (storedTienda) {
-            setTiendaId(Number(storedTienda));
-          }
-        } catch (e) {
-          console.error('[AuthContext] Error al cargar datos de usuario:', e);
-          // Si hay un error al obtener los datos, cerramos sesión
-          try {
-            await logout();
-          } catch (logoutError) {
-            console.error('[AuthContext] Error al cerrar sesión:', logoutError);
-            // Forzamos el reseteo del estado aunque falle el logout
-            setToken(null);
-            setUser(null);
-            setTiendaId(null);
+          // Obtener datos de usuario
+          const storedUser = await AsyncStorage.getItem('@user');
+          console.log('[AuthContext] Usuario almacenado:', storedUser ? 'Existe' : 'No existe');
+          
+          if (storedUser) {
+            try {
+              let userData = JSON.parse(storedUser);
+              
+              // Verificar si el usuario es un string (doble serialización)
+              if (typeof userData === 'string') {
+                console.log('[AuthContext] Usuario almacenado es un string, intentando parsear nuevamente');
+                userData = JSON.parse(userData);
+              }
+              
+              console.log('[AuthContext] Datos de usuario cargados:', {
+                id: userData.id,
+                email: userData.email,
+                rol: userData.rol,
+                clienteId: userData.clienteId
+              });
+              
+              // Establecer los datos de usuario en el estado
+              setUser(userData);
+              
+              // IMPORTANTE: Establecer isAuthenticated como true DESPUÉS de cargar los datos
+              console.log('[AuthContext] Estableciendo estado de autenticación como true');
+              setIsAuthenticated(true);
+              
+              // Cargar tienda seleccionada
+              const selectedTienda = await AsyncStorage.getItem('selectedTienda');
+              if (selectedTienda) {
+                setTiendaId(Number(selectedTienda));
+              } else if (userData.clienteId) {
+                setTiendaId(Number(userData.clienteId));
+                await AsyncStorage.setItem('selectedTienda', String(userData.clienteId));
+              }
+            } catch (parseError) {
+              console.error('[AuthContext] Error al parsear datos de usuario:', parseError);
+              // Limpiar datos inválidos
+              await AsyncStorage.removeItem('@token');
+              await AsyncStorage.removeItem('@user');
+              setToken(null);
+              setUser(null);
+              setIsAuthenticated(false);
+            }
+          } else {
+            console.log('[AuthContext] No hay datos de usuario almacenados');
             setIsAuthenticated(false);
           }
+        } else {
+          console.log('[AuthContext] No hay token almacenado');
+          setIsAuthenticated(false);
         }
-      } else {
-        console.log('[AuthContext] No hay sesión activa');
+      } catch (error) {
+        console.error('[AuthContext] Error al cargar datos de usuario:', error);
         setIsAuthenticated(false);
+      } finally {
+        // Indicar que la carga inicial ha terminado
+        setLoading(false);
+        setAuthReady(true);
       }
-    } catch (error) {
-      console.error('[AuthContext] Error al cargar datos:', error);
-      // Aseguramos que el usuario no esté autenticado en caso de error
-      setIsAuthenticated(false);
-    } finally {
-      // Siempre terminamos la carga, independientemente del resultado
-      console.log('[AuthContext] Finalizando carga de datos');
-      setLoading(false);
-    }
-  };
+    };
+    
+    loadUserData();
+  }, []);
 
   /**
    * Inicia sesión con email y contraseña
@@ -161,18 +166,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error('El email y la contraseña son obligatorios');
       }
       
-      // Llamar a la API de login - esta llamada lanzará una excepción si las credenciales son inválidas
-      // gracias a las validaciones que hemos añadido en auth.api.ts
-      const response = await authApi.login(email, password);
+      // Usar axios directamente para garantizar la conexión
+      console.log(`[AuthContext] Usando axios directamente para login...`);
+      const baseURL = 'http://10.0.2.2:3001';
+      
+      const response = await axios.post(`${baseURL}/auth/login`, { 
+        email, 
+        password 
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.log(`[AuthContext] Respuesta de login recibida: ${response.status}`);
+      console.log(`[AuthContext] Datos de respuesta:`, {
+        accessToken: response.data.accessToken ? 'Presente' : 'No presente',
+        usuario: response.data.usuario ? JSON.stringify(response.data.usuario) : 'No presente'
+      });
       
       // Verificar que la respuesta sea válida
-      if (!response) {
+      if (!response.data) {
         throw new Error('No se recibió respuesta del servidor');
       }
       
       // Obtener token y datos de usuario de la respuesta
-      const tokenValue = response.access_token || response.accessToken;
-      const userData = response.user || response.usuario;
+      const tokenValue = response.data.accessToken;
+      const userData = response.data.usuario;
       
       // Verificar que se recibió un token
       if (!tokenValue) {
@@ -184,24 +205,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error('No se recibieron datos de usuario');
       }
       
-      // Mostrar detalles completos de la respuesta (ocultando parte del token por seguridad)
-      const tokenDisplay = tokenValue ? `${tokenValue.substring(0, 20)}...` : 'No token';
-      
-      console.log('[AuthContext] Respuesta de login recibida:');
-      console.log(`[AuthContext] Token: ${tokenDisplay}`);
-      console.log(`[AuthContext] Tipo de token: ${response.tokenType || 'No especificado'}`);
-      console.log(`[AuthContext] Expira en: ${response.expiresIn || 'No especificado'} segundos`);
-      
-      // Mostrar información del usuario
-      console.log('[AuthContext] Datos del usuario:');
-      console.log(`[AuthContext] ID: ${userData.id}`);
-      console.log(`[AuthContext] Nombre: ${userData.nombre}`);
-      console.log(`[AuthContext] Email: ${userData.email}`);
-      console.log(`[AuthContext] Rol: ${userData.rol}`);
-      
       // Guardar token en AsyncStorage
       console.log('[AuthContext] Guardando token en AsyncStorage...');
-      await AsyncStorage.setItem('token', tokenValue);
+      await AsyncStorage.setItem('@token', tokenValue);
       
       // Guardar datos de usuario en AsyncStorage
       console.log('[AuthContext] Guardando datos de usuario en AsyncStorage...');
@@ -217,27 +223,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthenticated(true);
       
       console.log('[AuthContext] Sesión iniciada correctamente');
-      
-      // Forzar una actualización del estado para asegurar que la navegación reaccione
-      // Usamos un timeout más largo para dar tiempo a que React actualice el estado
-      setTimeout(() => {
-        console.log('[AuthContext] Verificando estado de autenticación después del login:');
-        console.log(`[AuthContext] isAuthenticated: ${isAuthenticated}`);
-        console.log(`[AuthContext] user: ${user ? user.nombre : 'null'}`);
-        console.log(`[AuthContext] token: ${token ? 'Presente' : 'null'}`);
-        
-        // Si el estado no se actualizó correctamente, intentar forzar una actualización
-        if (!isAuthenticated || !user || !token) {
-          console.log('[AuthContext] Estado no actualizado correctamente, forzando actualización...');
-          setIsAuthenticated(true);
-          setUser(userData);
-          setToken(tokenValue);
-        }
-      }, 1000);
     } catch (error) {
       console.error('[AuthContext] Error al iniciar sesión:', error);
       // Limpiamos cualquier dato parcial que pudiera haberse guardado
-      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('@token');
       await AsyncStorage.removeItem('@user');
       setToken(null);
       setUser(null);
@@ -271,78 +260,75 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       
       // Crear el objeto con el formato exacto que espera el endpoint /auth/register
-      // Según la documentación: nombre, email, password, tiendaId
+      // Según la documentación: nombre, email, password, rol, tiendaId
       const registerData = {
         nombre: userData.nombre,
         email: userData.email,
         password,
+        rol: 'cliente', // Siempre 'cliente' según las memorias del sistema
         tiendaId: tiendaId || 1 // Por defecto, tienda 1
-      };
-      
-      // Crear un objeto separado para pasar a la API
-      const apiRegisterData: any = {
-        ...registerData
       };
       
       // Añadir teléfono solo si existe (es opcional)
       if (userData.telefono) {
-        apiRegisterData.telefono = userData.telefono;
+        (registerData as any).telefono = userData.telefono;
       }
       
       console.log(`[AuthContext] Registrando cliente con tiendaId: ${tiendaId || 1}`);
-      console.log(`[AuthContext] Datos de registro:`, JSON.stringify(apiRegisterData, null, 2));
-      const response = await authApi.register(apiRegisterData);
-      console.log('[AuthContext] Respuesta de registro recibida:', { 
-        hasAccessToken: !!(response.access_token || response.accessToken),
-        hasUser: !!(response.user || response.usuario)
+      console.log(`[AuthContext] Datos de registro:`, {
+        ...registerData,
+        password: '***' // No mostrar la contraseña en los logs
       });
       
-      // El token puede venir como access_token o accessToken
-      const tokenValue = response.access_token || response.accessToken;
+      // Usar axios directamente para garantizar la conexión
+      console.log(`[AuthContext] Usando axios directamente para registro...`);
+      const baseURL = 'http://10.0.2.2:3001';
+      
+      const response = await axios.post(`${baseURL}/auth/register`, registerData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.log(`[AuthContext] Respuesta de registro recibida: ${response.status}`);
+      console.log(`[AuthContext] Datos de respuesta:`, {
+        accessToken: response.data.accessToken ? 'Presente' : 'No presente',
+        usuario: response.data.usuario ? JSON.stringify(response.data.usuario) : 'No presente'
+      });
+      
+      // El token viene como accessToken según auth-response.dto.ts
+      const tokenValue = response.data.accessToken;
       if (!tokenValue) {
         throw new Error('No se recibió token de acceso');
       }
       
       // Guardar token
-      await AsyncStorage.setItem('token', tokenValue);
+      await AsyncStorage.setItem('@token', tokenValue);
       setToken(tokenValue);
       
-      // El usuario puede venir como user o usuario
-      const userInfo = response.user || response.usuario;
+      // El usuario viene como usuario según auth-response.dto.ts
+      const userInfo = response.data.usuario;
       if (userInfo) {
         await AsyncStorage.setItem('@user', JSON.stringify(userInfo));
         setUser(userInfo);
-      } else {
-        // Si no viene el usuario en la respuesta, lo obtenemos del servidor
-        try {
-          const fetchedUser = await authApi.fetchMe();
-          await AsyncStorage.setItem('@user', JSON.stringify(fetchedUser));
-          setUser(fetchedUser);
-        } catch (fetchError) {
-          console.error('[AuthContext] Error al obtener datos del usuario:', fetchError);
-          // Continuamos aunque no podamos obtener los datos del usuario
-        }
       }
       
-      // Guardar tiendaId seleccionada
-      if (tiendaId) {
-        await AsyncStorage.setItem('tiendaId', tiendaId.toString());
-        setTiendaId(tiendaId);
-      }
-      
+      // Actualizar estado de autenticación
       setIsAuthenticated(true);
-      console.log('[AuthContext] Usuario registrado correctamente');
+      
+      console.log('[AuthContext] Registro completado con éxito');
+      return response.data;
     } catch (error) {
       console.error('[AuthContext] Error al registrar usuario:', error);
       // Limpiamos cualquier dato parcial que pudiera haberse guardado
-      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('@token');
       await AsyncStorage.removeItem('@user');
       setToken(null);
       setUser(null);
       setIsAuthenticated(false);
       throw error;
     } finally {
-      console.log('[AuthContext] Finalizando proceso de registro');
       setLoading(false);
     }
   };
@@ -365,7 +351,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       // Limpiar almacenamiento local
       const removePromises = [
-        AsyncStorage.removeItem('token'),
+        AsyncStorage.removeItem('@token'),
         AsyncStorage.removeItem('@user'),
         AsyncStorage.removeItem('tiendaId'),
         AsyncStorage.removeItem('selectedTienda') // También limpiamos la tienda seleccionada
@@ -436,19 +422,94 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   /**
-   * Verifica la conexión con el servidor
+   * Verificar la conexión con el servidor
+   * @returns true si hay conexión con el servidor
    */
   const checkConnection = async (): Promise<boolean> => {
     try {
       console.log('[AuthContext] Verificando conexión con el servidor');
-      const isConnected = await authApi.checkAuthServer();
-      console.log(`[AuthContext] Estado de conexión: ${isConnected ? 'Conectado' : 'Desconectado'}`);
-      return isConnected;
+      
+      // Usar axios directamente para verificar la conexión
+      const axios = require('axios');
+      const baseURL = 'http://10.0.2.2:3001';
+      
+      try {
+        const response = await axios.get(baseURL, {
+          timeout: 5000,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        const isConnected = response.status === 200;
+        console.log(`[AuthContext] Estado de conexión: ${isConnected ? 'Conectado' : 'Desconectado'}`);
+        return isConnected;
+      } catch (error) {
+        console.error('[AuthContext] Error al verificar conexión:', error);
+        return false;
+      }
     } catch (error) {
       console.error('[AuthContext] Error al verificar conexión:', error);
       return false;
     }
   };
+
+  /**
+   * Actualiza el estado de autenticación directamente
+   * Esta función es útil para forzar la autenticación desde fuera del contexto
+   */
+  const updateAuthState = (tokenValue: string, userData: AuthUsuario) => {
+    console.log('[AuthContext] Actualizando estado de autenticación manualmente');
+    console.log('[AuthContext] Datos de usuario:', {
+      id: userData.id,
+      nombre: userData.nombre,
+      email: userData.email,
+      rol: userData.rol,
+      clienteId: userData.clienteId
+    });
+    
+    // Actualizar el estado inmediatamente
+    setToken(tokenValue);
+    setUser(userData);
+    setIsAuthenticated(true);
+    setAuthReady(true);
+    
+    // Guardar los datos en AsyncStorage
+    const saveData = async () => {
+      try {
+        await AsyncStorage.setItem('@token', tokenValue);
+        await AsyncStorage.setItem('@user', JSON.stringify(userData));
+        
+        // Guardar la tienda seleccionada si existe clienteId
+        if (userData.clienteId) {
+          const tiendaIdToUse = String(userData.clienteId);
+          await AsyncStorage.setItem('selectedTienda', tiendaIdToUse);
+          setTiendaId(Number(tiendaIdToUse)); // Actualizar el estado de tiendaId inmediatamente
+          console.log('[AuthContext] Tienda guardada:', tiendaIdToUse);
+        }
+        
+        console.log('[AuthContext] Datos guardados en AsyncStorage correctamente');
+        
+        // Forzar una segunda actualización del estado después de guardar los datos
+        setTimeout(() => {
+          console.log('[AuthContext] Forzando segunda actualización del estado');
+          setToken(tokenValue);
+          setUser(userData);
+          if (userData.clienteId) {
+            setTiendaId(Number(userData.clienteId)); // Asegurar que tiendaId esté actualizado
+          }
+          setIsAuthenticated(true);
+          setAuthReady(true);
+        }, 300);
+      } catch (error) {
+        console.error('[AuthContext] Error al guardar datos en AsyncStorage:', error);
+      }
+    };
+    
+    // Ejecutar la función de guardado
+    saveData();
+  };
+
   // Proporcionar el contexto a los componentes hijos
   return (
     <AuthContext.Provider
@@ -458,12 +519,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         tiendaId,
         isAuthenticated,
         loading,
+        authReady,
         login,
         register,
         logout,
         selectTienda,
         updateUser,
-        checkConnection
+        checkConnection,
+        updateAuthState
       }}
     >
       {children}
@@ -475,4 +538,3 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
  * Hook para acceder al contexto de autenticación
  */
 export const useAuth = () => useContext(AuthContext);
-  

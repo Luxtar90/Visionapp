@@ -96,7 +96,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Nombre"
-          value={formData.nombre}
+          value={formData.nombre || ''}
           onChangeText={(value) => handleChange('nombre', value)}
           placeholder="Ingrese el nombre de la tienda"
           error={errors.nombre}
@@ -107,7 +107,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Dirección"
-          value={formData.direccion}
+          value={formData.direccion || ''}
           onChangeText={(value) => handleChange('direccion', value)}
           placeholder="Ingrese la dirección"
           error={errors.direccion}
@@ -118,7 +118,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Teléfono"
-          value={formData.telefono}
+          value={formData.telefono || ''}
           onChangeText={(value) => handleChange('telefono', value)}
           placeholder="Ingrese el teléfono"
           keyboardType="phone-pad"
@@ -130,7 +130,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Email"
-          value={formData.email}
+          value={formData.email || ''}
           onChangeText={(value) => handleChange('email', value)}
           placeholder="Ingrese el email"
           keyboardType="email-address"
@@ -142,7 +142,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Horario"
-          value={formData.horario}
+          value={formData.horario || ''}
           onChangeText={(value) => handleChange('horario', value)}
           placeholder="Ej: Lun-Vie: 9:00-18:00, Sáb: 9:00-14:00"
         />
@@ -151,7 +151,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="Descripción"
-          value={formData.descripcion}
+          value={formData.descripcion || ''}
           onChangeText={(value) => handleChange('descripcion', value)}
           placeholder="Ingrese una descripción"
           multiline
@@ -162,7 +162,7 @@ export const TiendaForm: React.FC<TiendaFormProps> = ({
       <View style={styles.formGroup}>
         <FormField
           label="URL del Logo"
-          value={formData.logo_url}
+          value={formData.logo_url || ''}
           onChangeText={(value) => handleChange('logo_url', value)}
           placeholder="Ingrese la URL del logo"
         />

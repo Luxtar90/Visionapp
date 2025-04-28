@@ -41,7 +41,8 @@ import {
   ServicioPopular,
   EmpleadoDestacado
 } from '../../interfaces/Estadisticas';
-import { Empleado } from '../../interfaces/Empleado';
+import { Usuario } from '../../api/auth.api';
+import { Empleado } from '../../api/empleados.api';
 import { Servicio } from '../../interfaces/Servicio';
 
 // Tema

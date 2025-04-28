@@ -26,6 +26,7 @@ interface SelectFieldProps {
   error?: string;
   icon?: string;
   disabled?: boolean;
+  required?: boolean;
 }
 
 export const SelectField = ({
@@ -37,6 +38,7 @@ export const SelectField = ({
   error,
   icon,
   disabled = false,
+  required = false,
 }: SelectFieldProps) => {
   const [modalVisible, setModalVisible] = useState(false);
   

@@ -3,16 +3,17 @@
 // para mantener compatibilidad con el código existente
 
 import { useAuth as useAuthContext } from '../contexts/AuthContext';
-import { Usuario as ApiUsuario } from '../api/auth.api';
+import { Usuario as ApiUsuario, LoginResponse } from '../api/auth.api';
 
 // Interfaz de usuario para mantener compatibilidad con el código existente
 export interface User {
-  id: string;
+  id: number;
   nombre: string;
   email: string;
   telefono?: string;
-  rol: 'admin' | 'empleado' | 'cliente';
+  rol: string;
   tiendaId?: number;
+  clienteId?: number;
   foto_perfil?: string;
 }
 
@@ -22,11 +23,13 @@ export interface AuthHookResult {
   isAuthenticated: boolean;
   loading: boolean;
   token: string | null;
+  authReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (userData: { nombre: string; email: string; rol?: 'admin' | 'empleado' | 'cliente'; telefono?: string }, password: string, tiendaId?: number) => Promise<void>;
+  register: (userData: { nombre: string; email: string; rol?: string; telefono?: string }, password: string, tiendaId?: number) => Promise<LoginResponse>;
   updateUser: (userData: Partial<User>) => Promise<void>;
   checkConnection: () => Promise<boolean>;
+  updateAuthState: (tokenValue: string, userData: User) => void;
 }
 
 /**
@@ -46,11 +49,13 @@ export const useAuth = (): AuthHookResult => {
     isAuthenticated: auth.isAuthenticated,
     loading: auth.loading,
     token: auth.token,
+    authReady: auth.authReady,
     login: auth.login,
     logout: auth.logout,
     register: auth.register,
     updateUser: auth.updateUser,
-    checkConnection: auth.checkConnection
+    checkConnection: auth.checkConnection,
+    updateAuthState: auth.updateAuthState
   };
 };
 
