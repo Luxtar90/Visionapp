@@ -227,10 +227,29 @@ class AuthApi {
         console.warn('[Auth] Error al notificar logout al servidor:', e);
       }
       
-      // Eliminar datos de autenticación del almacenamiento local
-      await AsyncStorage.removeItem('@token');
-      await AsyncStorage.removeItem('@refresh_token');
-      await AsyncStorage.removeItem('@user');
+      // Eliminar TODOS los datos relacionados con el usuario del almacenamiento local
+      console.log('[Auth] Limpiando todos los datos de usuario de AsyncStorage');
+      
+      // Lista de claves a eliminar
+      const keysToRemove = [
+        '@token',
+        '@refresh_token',
+        '@user',
+        '@userId',
+        '@clienteId',
+        '@tiendaId',
+        '@carrito',
+        '@lastSearch',
+        '@favorites'
+      ];
+      
+      // Eliminar todas las claves
+      for (const key of keysToRemove) {
+        await AsyncStorage.removeItem(key);
+        console.log(`[Auth] Eliminado ${key} de AsyncStorage`);
+      }
+      
+      console.log('[Auth] Sesión cerrada completamente, todos los datos de usuario eliminados');
     } catch (error) {
       console.error('[Auth] Error al cerrar sesión:', error);
       throw error;

@@ -179,6 +179,49 @@ console.log('[API] Cliente API creado con la siguiente configuración:');
 console.log(`[API] URL base: ${apiConfig.getBaseUrl()}`);
 console.log(`[API] Timeout: ${apiConfig.getConfig().timeout}ms`);
 
+// Función para refrescar el token
+const refreshAuthToken = async (): Promise<string | null> => {
+  try {
+    console.log('[API] Intentando refrescar token...');
+    
+    // Obtener el token actual
+    const currentToken = await AsyncStorage.getItem('@token');
+    
+    if (!currentToken) {
+      console.log('[API] No hay token para refrescar');
+      return null;
+    }
+    
+    // Llamar al endpoint de refresh token
+    const response = await axios.post(
+      `${apiConfig.getBaseUrl()}/auth/refresh-token`,
+      {},
+      {
+        headers: {
+          'Authorization': `Bearer ${currentToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (response.data && response.data.accessToken) {
+      const newToken = response.data.accessToken;
+      
+      // Guardar el nuevo token
+      await AsyncStorage.setItem('@token', newToken);
+      console.log('[API] Token refrescado correctamente');
+      
+      return newToken;
+    } else {
+      console.log('[API] No se pudo obtener un nuevo token');
+      return null;
+    }
+  } catch (error) {
+    console.error('[API] Error al refrescar token:', error);
+    return null;
+  }
+};
+
 // Interceptor para las solicitudes
 client.interceptors.request.use(async config => {
   try {
@@ -188,11 +231,20 @@ client.interceptors.request.use(async config => {
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       console.log('[API] Token agregado a la solicitud');
+    } else {
+      console.warn('[API] No se encontró token para la solicitud');
     }
 
     // Agregar ID de tienda si existe
-    // Usamos la clave 'selectedTienda' que es la que se usa en el resto de la aplicación
-    const tiendaId = await AsyncStorage.getItem('selectedTienda');
+    // Intentar obtener el ID de tienda de varias claves posibles para mayor compatibilidad
+    let tiendaId = await AsyncStorage.getItem('@tiendaId');
+    if (!tiendaId) {
+      tiendaId = await AsyncStorage.getItem('selectedTienda');
+    }
+    if (!tiendaId) {
+      tiendaId = await AsyncStorage.getItem('tiendaPrincipal');
+    }
+    
     if (tiendaId) {
       config.headers['X-Store-ID'] = tiendaId;
       console.log(`[API] ID de tienda agregado a la solicitud: ${tiendaId}`);
@@ -219,84 +271,183 @@ client.interceptors.response.use(
     console.log(`[API] URL: ${response.config.url}`);
     console.log(`[API] Método: ${response.config.method?.toUpperCase()}`);
     console.log(`[API] Estado: ${response.status} ${response.statusText}`);
+    console.log(`[API] Headers relevantes: ${JSON.stringify({
+      'content-type': response.headers['content-type']
+    })}`);
+    console.log(`[API] Datos de la respuesta: ${JSON.stringify(response.data, null, 2)}`);
     
-    // Mostrar los headers relevantes
-    const relevantHeaders = ['content-type', 'authorization'];
-    console.log('[API] Headers relevantes:', 
-      Object.entries(response.headers)
-        .filter(([key]) => relevantHeaders.includes(key.toLowerCase()))
-        .reduce((obj, [key, value]) => ({ ...obj, [key]: value }), {})
-    );
-    
-    // Mostrar los datos de la respuesta (limitados para evitar logs demasiado grandes)
-    if (response.data) {
-      console.log('[API] Datos de la respuesta:', 
-        typeof response.data === 'object' 
-          ? JSON.stringify(response.data, null, 2).substring(0, 500) + (JSON.stringify(response.data).length > 500 ? '...' : '')
-          : response.data
-      );
-    }
-    
-    // Llamar al logger original también
+    // Log resumido para la consola
     apiLogger.logResponse(response);
+    
     return response;
   },
-  error => {
-    // Mostrar detalles del error en la consola
+  async (error: AxiosError) => {
+    // Registrar el error en los logs con más detalles
     console.log(`\n[API] ERROR EN LA SOLICITUD:`);
-    
-    if (error.config) {
-      console.log(`[API] URL: ${error.config.url}`);
-      console.log(`[API] Método: ${error.config.method?.toUpperCase()}`);
-      console.log(`[API] Datos enviados:`, error.config.data ? JSON.stringify(JSON.parse(error.config.data), null, 2) : 'Ninguno');
-    }
+    console.log(`[API] URL: ${error.config?.url}`);
+    console.log(`[API] Método: ${error.config?.method?.toUpperCase()}`);
+    console.log(`[API] Datos enviados: ${error.config?.data ? JSON.stringify(JSON.parse(error.config.data), null, 2) : 'Ninguno'}`);
     
     if (error.response) {
-      // Error con respuesta del servidor
       console.log(`[API] Código de estado: ${error.response.status} ${error.response.statusText}`);
-      console.log(`[API] Datos del error:`, error.response.data ? JSON.stringify(error.response.data, null, 2) : 'Sin datos');
+      console.log(`[API] Datos del error: ${JSON.stringify(error.response.data, null, 2)}`);
     } else if (error.request) {
-      // No se recibió respuesta del servidor
       console.log(`[API] No se recibió respuesta del servidor`);
-      console.log(`[API] Detalles:`, error.request);
+      console.log(`[API] Detalles: ${error.message}`);
     } else {
-      // Error de configuración
-      console.log(`[API] Error de configuración: ${error.message}`);
+      console.log(`[API] Error al configurar la solicitud: ${error.message}`);
     }
     
-    // Registrar el error en los logs
+    // Log resumido para la consola
     apiLogger.logError(error);
     
-    // Personalizar el mensaje de error según el tipo
+    // Manejar errores específicos
     if (error.response) {
-      // Error con respuesta del servidor
-      const statusCode = error.response.status;
-      const errorData = error.response.data;
+      // Procesar el error según su código de estado
+      console.log(`[API] Procesando error con código ${error.response.status}`);
       
-      console.log(`[API] Procesando error con código ${statusCode}`);
-      
-      if (statusCode === 401) {
-        // Error de autenticación
-        error.message = 'Credenciales inválidas o sesión expirada';
-      } else if (statusCode === 403) {
-        // Error de autorización
-        error.message = 'No tienes permisos para realizar esta acción';
-      } else if (statusCode === 404) {
-        // Recurso no encontrado
-        error.message = 'El recurso solicitado no existe';
-      } else if (statusCode >= 500) {
-        // Error del servidor
-        error.message = 'Error en el servidor. Por favor, intenta más tarde';
-      } else if (errorData && errorData.message) {
-        // Usar el mensaje de error del servidor si existe
-        error.message = errorData.message;
+      // Error 401: No autorizado (token inválido o expirado)
+      if (error.response.status === 401) {
+        // Verificar si tenemos la configuración original de la solicitud
+        const originalRequest = error.config;
+        
+        // Verificar si ya intentamos refrescar el token para esta solicitud
+        // @ts-ignore
+        if (originalRequest && !originalRequest._retry) {
+          try {
+            // Marcar que estamos intentando refrescar el token
+            // @ts-ignore
+            originalRequest._retry = true;
+            
+            // Intentar refrescar el token
+            const newToken = await refreshAuthToken();
+            
+            if (newToken) {
+              // Actualizar el token en la solicitud original
+              // @ts-ignore
+              originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+              
+              // Reintentar la solicitud original con el nuevo token
+              console.log('[API] Reintentando solicitud con nuevo token');
+              return client(originalRequest);
+            }
+          } catch (refreshError) {
+            console.error('[API] Error al refrescar token y reintentar:', refreshError);
+          }
+        }
+        
+        // Si llegamos aquí, no pudimos refrescar el token o ya lo intentamos
+        // Intentar obtener información sobre el error
+        let errorMessage = 'Credenciales inválidas o sesión expirada';
+        
+        if (error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data) {
+          const message = error.response.data.message;
+          if (typeof message === 'string') {
+            errorMessage = message;
+          }
+        }
+        
+        // Crear un error personalizado
+        const authError = new Error(errorMessage) as AxiosError;
+        authError.response = error.response;
+        authError.request = error.request;
+        authError.config = error.config;
+        
+        // Notificar al usuario sobre el error de autenticación
+        console.error('[API Error]', `${error.response.status} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, JSON.stringify(error.response.data));
+        
+        // Devolver el error para que pueda ser manejado por el código que hizo la solicitud
+        return Promise.reject(authError);
       }
+      
+      // Error 403: Prohibido (no tiene permisos)
+      if (error.response.status === 403) {
+        let errorMessage = 'No tienes permisos para realizar esta acción';
+        
+        if (error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data) {
+          const message = error.response.data.message;
+          if (typeof message === 'string') {
+            errorMessage = message;
+          } else if (Array.isArray(message) && message.length > 0 && typeof message[0] === 'string') {
+            errorMessage = message.join(', ');
+          }
+        }
+        
+        const customError = new Error(errorMessage) as AxiosError;
+        customError.response = error.response;
+        customError.config = error.config;
+        return Promise.reject(customError);
+      }
+      
+      // Error 404: No encontrado
+      if (error.response.status === 404) {
+        let errorMessage = 'El recurso solicitado no existe';
+        
+        if (error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data) {
+          const message = error.response.data.message;
+          if (typeof message === 'string') {
+            errorMessage = message;
+          } else if (Array.isArray(message) && message.length > 0 && typeof message[0] === 'string') {
+            errorMessage = message.join(', ');
+          }
+        }
+        
+        const customError = new Error(errorMessage) as AxiosError;
+        customError.response = error.response;
+        customError.config = error.config;
+        return Promise.reject(customError);
+      }
+      
+      // Error 400: Bad Request
+      if (error.response.status === 400) {
+        let errorMessage = 'Datos inválidos en la solicitud';
+        
+        // Intentar extraer mensajes de error específicos
+        if (error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data) {
+          const message = error.response.data.message;
+          if (Array.isArray(message) && message.length > 0 && typeof message[0] === 'string') {
+            errorMessage = message.join(', ');
+          } else if (typeof message === 'string') {
+            errorMessage = message;
+          }
+        }
+        
+        const customError = new Error(errorMessage) as AxiosError;
+        customError.response = error.response;
+        customError.config = error.config;
+        return Promise.reject(customError);
+      }
+      
+      // Error 500: Error del servidor
+      if (error.response.status >= 500) {
+        let errorMessage = 'Error interno del servidor';
+        
+        if (error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data) {
+          const message = error.response.data.message;
+          if (typeof message === 'string') {
+            errorMessage = message;
+          } else if (Array.isArray(message) && message.length > 0 && typeof message[0] === 'string') {
+            errorMessage = message.join(', ');
+          }
+        }
+        
+        const customError = new Error(errorMessage) as AxiosError;
+        customError.response = error.response;
+        customError.config = error.config;
+        return Promise.reject(customError);
+      }
+
+      // Otros errores
+      return Promise.reject(error);
     } else if (error.request) {
       // Error de red (no se recibió respuesta)
-      error.message = 'No se pudo conectar con el servidor. Verifica tu conexión a internet';
-      console.log(`[API] Error de conexión configurado: ${error.message}`);
+      const networkError = new Error('No se pudo conectar con el servidor. Verifica tu conexión a internet.') as AxiosError;
+      networkError.request = error.request;
+      networkError.config = error.config;
+      return Promise.reject(networkError);
     }
     
+    // Otros errores
     return Promise.reject(error);
   }
 );
