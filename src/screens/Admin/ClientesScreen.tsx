@@ -68,8 +68,8 @@ export const ClientesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     } else {
       const filtered = clientes.filter(
         cliente => 
-          cliente.nombre.toLowerCase().includes(text.toLowerCase()) ||
-          cliente.apellido.toLowerCase().includes(text.toLowerCase()) ||
+          cliente.nombres.toLowerCase().includes(text.toLowerCase()) ||
+          cliente.apellidos.toLowerCase().includes(text.toLowerCase()) ||
           cliente.email.toLowerCase().includes(text.toLowerCase()) ||
           cliente.telefono.includes(text)
       );
@@ -92,11 +92,11 @@ export const ClientesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     >
       <View style={styles.clienteAvatar}>
         <Text style={styles.clienteInitials}>
-          {item.nombre.charAt(0)}{item.apellido.charAt(0)}
+          {item.nombres.charAt(0)}{item.apellidos.charAt(0)}
         </Text>
       </View>
       <View style={styles.clienteInfo}>
-        <Text style={styles.clienteName}>{item.nombre} {item.apellido}</Text>
+        <Text style={styles.clienteName}>{item.nombres} {item.apellidos}</Text>
         <Text style={styles.clienteDetail}>{item.email}</Text>
         <Text style={styles.clienteDetail}>{item.telefono}</Text>
       </View>
@@ -133,8 +133,8 @@ export const ClientesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       
       <FlatList
         data={filteredClientes}
-        keyExtractor={(item) => item.id}
         renderItem={renderClienteItem}
+        keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl

@@ -6,6 +6,7 @@ export interface Tienda {
   direccion: string;
   telefono: string;
   email?: string;
+  email_contacto?: string; // Añadido para compatibilidad con la API
   horario?: string;
   logo_url?: string;
   activa: boolean;

@@ -24,5 +24,6 @@ export const colors = {
   white: '#FFFFFF',  // Blanco para textos sobre fondos oscuros
   warningLight: '#FFF3E0', // Fondo claro para alertas de advertencia
   errorLight: '#FFEBEE', // Fondo claro para alertas de error
-  successLight: '#E8F5E9' // Fondo claro para alertas de éxito
+  successLight: '#E8F5E9', // Fondo claro para alertas de éxito
+  info: '#3498DB' // Color para información y estadísticas
 };

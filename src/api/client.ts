@@ -155,6 +155,42 @@ class ApiLogger {
 const apiConfig = ApiConfigManager.getInstance();
 const apiLogger = ApiLogger.getInstance();
 
+// Variable global para almacenar la función de logout
+let globalLogoutFunction: (() => Promise<void>) | null = null;
+
+// Función para establecer la función de logout global
+export const setGlobalLogoutFunction = (logoutFn: () => Promise<void>) => {
+  console.log('[API] Configurando función global de logout');
+  globalLogoutFunction = logoutFn;
+};
+
+// Función para ejecutar el logout global
+export const executeGlobalLogout = async (reason: string) => {
+  console.log(`[API] Ejecutando logout global. Razón: ${reason}`);
+  
+  // Mostrar alerta al usuario
+  import('react-native').then(({ Alert }) => {
+    Alert.alert(
+      'Sesión expirada',
+      'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.',
+      [{ text: 'Aceptar' }]
+    );
+  }).catch(err => {
+    console.error('[API] Error al importar Alert:', err);
+  });
+  
+  if (globalLogoutFunction) {
+    try {
+      await globalLogoutFunction();
+      console.log('[API] Logout global ejecutado correctamente');
+    } catch (error) {
+      console.error('[API] Error al ejecutar logout global:', error);
+    }
+  } else {
+    console.warn('[API] No hay función de logout global configurada');
+  }
+};
+
 // Forzar la URL correcta para el emulador Android antes de crear el cliente
 console.log('[API] Configurando URL base fija para el backend: http://10.0.2.2:3001');
 apiConfig.setCustomUrl('http://10.0.2.2:3001');
@@ -355,6 +391,9 @@ client.interceptors.response.use(
         
         // Notificar al usuario sobre el error de autenticación
         console.error('[API Error]', `${error.response.status} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, JSON.stringify(error.response.data));
+        
+        // Ejecutar logout global
+        await executeGlobalLogout('Token expirado o inválido');
         
         // Devolver el error para que pueda ser manejado por el código que hizo la solicitud
         return Promise.reject(authError);

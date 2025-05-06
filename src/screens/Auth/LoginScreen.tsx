@@ -131,7 +131,8 @@ const LoginScreen = () => {
           // Guardar directamente en AsyncStorage antes de actualizar el estado
           await AsyncStorage.setItem('@token', response.data.accessToken);
           await AsyncStorage.setItem('@user', JSON.stringify(normalizedUser));
-          await AsyncStorage.setItem('selectedTienda', tiendaId);
+          // No guardar automáticamente la tienda seleccionada para permitir que el usuario elija
+          // await AsyncStorage.setItem('selectedTienda', tiendaId);
           
           // Guardar una bandera para forzar la navegación directa
           await AsyncStorage.setItem('@forceNavigation', 'true');
@@ -139,62 +140,31 @@ const LoginScreen = () => {
           // Actualizar el estado de autenticación en el contexto
           updateAuthState(response.data.accessToken, normalizedUser);
           
-          // Mostrar mensaje de éxito
+          // Forzar un reinicio completo de la aplicación
+          console.log('[LoginScreen] Forzando reinicio de la aplicación');
+                  
+          // Obtener el rol del usuario para navegar correctamente
+          const userRolLowerCase = normalizedRole.toLowerCase();
+          console.log('[LoginScreen] Navegando según rol:', userRolLowerCase);
+                  
+          // En lugar de intentar navegar directamente, simplemente actualizamos
+          // el estado de autenticación y dejamos que el sistema de navegación principal
+          // (en index.tsx) maneje la redirección basada en el rol
+          console.log('[LoginScreen] Actualizando estado de autenticación manualmente');
+          updateAuthState(response.data.accessToken, normalizedUser);
+                  
+          // Forzar una segunda actualización del estado después de un breve retraso
+          // para asegurar que el sistema de navegación detecte el cambio
+          setTimeout(() => {
+            console.log('[AuthContext] Forzando segunda actualización del estado');
+            updateAuthState(response.data.accessToken, normalizedUser);
+          }, 300);
+          
+          // Mostrar mensaje de éxito sin intentar navegar directamente
           Alert.alert(
             'Inicio de sesión exitoso',
             `Has iniciado sesión como ${normalizedUser.nombre || normalizedUser.email} (${normalizedRole}).`,
-            [
-              {
-                text: 'Continuar',
-                onPress: () => {
-                  // Forzar un reinicio completo de la aplicación
-                  console.log('[LoginScreen] Forzando reinicio de la aplicación');
-                  
-                  // Obtener el rol del usuario para navegar correctamente
-                  const userRolLowerCase = normalizedRole.toLowerCase();
-                  console.log('[LoginScreen] Navegando según rol:', userRolLowerCase);
-                  
-                  // Intentar navegar directamente
-                  try {
-                    if (userRolLowerCase === 'admin' || userRolLowerCase === 'administrador') {
-                      console.log('[LoginScreen] Navegando a pantalla de administrador');
-                      // Resetear la navegación a la pantalla de autenticación
-                      // Esto forzará a la aplicación a reevaluar el estado de autenticación
-                      // y mostrar el navegador correcto según el rol
-                      navigation.reset({
-                        index: 0,
-                        routes: [{ name: 'Login' }],
-                      });
-                    } else if (userRolLowerCase === 'empleado' || userRolLowerCase === 'vendedor') {
-                      console.log('[LoginScreen] Navegando a pantalla de empleado');
-                      navigation.reset({
-                        index: 0,
-                        routes: [{ name: 'Login' }],
-                      });
-                    } else {
-                      console.log('[LoginScreen] Navegando a pantalla de cliente');
-                      navigation.reset({
-                        index: 0,
-                        routes: [{ name: 'Login' }],
-                      });
-                    }
-                  } catch (navError) {
-                    console.error('[LoginScreen] Error al navegar:', navError);
-                    
-                    // Si hay un error de navegación, intentar con un enfoque alternativo
-                    setTimeout(() => {
-                      console.log('[LoginScreen] Intentando navegación alternativa');
-                      try {
-                        // Forzar un reinicio completo de la aplicación
-                        navigation.navigate('Login');
-                      } catch (e) {
-                        console.error('[LoginScreen] Error en navegación alternativa:', e);
-                      }
-                    }, 100);
-                  }
-                }
-              }
-            ]
+            [{ text: 'Continuar', onPress: () => {} }]
           );
         } catch (storageError) {
           console.error('[LoginScreen] Error al guardar datos:', storageError);

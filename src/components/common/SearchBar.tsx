@@ -7,11 +7,12 @@ interface SearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  style?: any;
 }
 
-export const SearchBar = ({ value, onChangeText, placeholder = 'Buscar...' }: SearchBarProps) => {
+export const SearchBar = ({ value, onChangeText, placeholder = 'Buscar...', style }: SearchBarProps) => {
   return (
-    <View style={styles.searchContainer}>
+    <View style={[styles.searchContainer, style]}>
       <Ionicons name="search-outline" size={20} color="#777" style={styles.searchIcon} />
       <TextInput
         style={styles.searchInput}

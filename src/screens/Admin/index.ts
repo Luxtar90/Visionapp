@@ -1,5 +1,5 @@
 // Importamos las pantallas de Admin que existen
-import { ClientesScreen } from './ClientesScreen';
+import NuevoClientesScreen from './NuevoClientesScreen';
 import EstadisticasScreen from './EstadisticasScreen';
 import { InventarioScreen } from './InventarioScreen';
 import { NotificacionesScreen } from './NotificacionesScreen';
@@ -7,21 +7,30 @@ import TiendasScreen from './TiendasScreen';
 import NuevoEmpleadosScreen from './NuevoEmpleadosScreen';
 import NuevoReservasScreen from './NuevoReservasScreen';
 import NuevoServiciosScreen from './NuevoServiciosScreen';
-
-// Creamos el archivo DashboardScreen.tsx y ProductosScreen.tsx en una carpeta separada
+import PerfilScreen from './PerfilScreen';
+import DashboardScreen from './DashboardScreen';
+import CatalogoServiciosScreen from './CatalogoServiciosScreen';
+import ContabilidadScreen from './ContabilidadScreen';
+import InformesFinancierosScreen from './InformesFinancierosScreen';
+import MarketingScreen from './MarketingScreen';
+import DetalleClienteScreen from './DetalleClienteScreen';
 
 // Exportamos todas las pantallas
 export {
-  ClientesScreen,
-  EstadisticasScreen as DashboardScreen, // Usamos EstadisticasScreen temporalmente
-  EstadisticasScreen, // También exportamos el original
-  InventarioScreen,
-  NotificacionesScreen,
-  TiendasScreen,
-  InventarioScreen as ProductosScreen, // Usamos InventarioScreen temporalmente
-  
-  // Exportamos con los nombres que espera el AdminTabNavigator
+  DashboardScreen,
+  NuevoClientesScreen as ClientesScreen,
+  EstadisticasScreen,
+  InventarioScreen as ProductosScreen,
   NuevoEmpleadosScreen as EmpleadosScreen,
+  NuevoServiciosScreen as ServiciosScreen,
   NuevoReservasScreen as ReservasScreen,
-  NuevoServiciosScreen as ServiciosScreen
+  NotificacionesScreen,
+  TiendasScreen as VentasScreen,
+  NotificacionesScreen as ConfiguracionScreen,
+  PerfilScreen,
+  CatalogoServiciosScreen,
+  ContabilidadScreen,
+  InformesFinancierosScreen,
+  MarketingScreen,
+  DetalleClienteScreen
 };

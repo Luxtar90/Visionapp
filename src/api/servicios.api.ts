@@ -1,5 +1,21 @@
 import { client } from './client';
-import { Servicio } from '../interfaces/Servicio';
+
+// Definir las interfaces aquí en lugar de importarlas
+export interface Servicio {
+  id: string;
+  nombre: string;
+  precio: number;
+  duracion: number;
+  descripcion?: string;
+  activo?: boolean;
+  // Otros campos que pueda tener el servicio
+}
+
+export interface ServicioAsignado extends Servicio {
+  // Campos adicionales específicos para servicios asignados a empleados
+  empleadoId?: string;
+  activo?: boolean;
+}
 
 export const getServicios = async (tiendaId?: string): Promise<Servicio[]> => {
   const { data } = await client.get('/servicios', { params: { tiendaId } });

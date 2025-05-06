@@ -9,6 +9,8 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { authApi, Usuario as AuthUsuario, LoginResponse } from '../api/auth.api';
+import { setGlobalLogoutFunction } from '../api/client';
+import { Alert } from 'react-native';
 
 /**
  * Propiedades del contexto de autenticación
@@ -72,86 +74,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
-
-  // Efecto para cargar los datos de usuario al inicio
-  useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        console.log('[AuthContext] Cargando datos de usuario desde AsyncStorage...');
-        
-        // Obtener token de AsyncStorage
-        const storedToken = await AsyncStorage.getItem('@token');
-        console.log('[AuthContext] Token almacenado:', storedToken ? 'Existe' : 'No existe');
-        
-        if (storedToken) {
-          // Establecer el token en el estado
-          setToken(storedToken);
-          
-          // Obtener datos de usuario
-          const storedUser = await AsyncStorage.getItem('@user');
-          console.log('[AuthContext] Usuario almacenado:', storedUser ? 'Existe' : 'No existe');
-          
-          if (storedUser) {
-            try {
-              let userData = JSON.parse(storedUser);
-              
-              // Verificar si el usuario es un string (doble serialización)
-              if (typeof userData === 'string') {
-                console.log('[AuthContext] Usuario almacenado es un string, intentando parsear nuevamente');
-                userData = JSON.parse(userData);
-              }
-              
-              console.log('[AuthContext] Datos de usuario cargados:', {
-                id: userData.id,
-                email: userData.email,
-                rol: userData.rol,
-                clienteId: userData.clienteId
-              });
-              
-              // Establecer los datos de usuario en el estado
-              setUser(userData);
-              
-              // IMPORTANTE: Establecer isAuthenticated como true DESPUÉS de cargar los datos
-              console.log('[AuthContext] Estableciendo estado de autenticación como true');
-              setIsAuthenticated(true);
-              
-              // Cargar tienda seleccionada
-              const selectedTienda = await AsyncStorage.getItem('selectedTienda');
-              if (selectedTienda) {
-                setTiendaId(Number(selectedTienda));
-              } else if (userData.clienteId) {
-                setTiendaId(Number(userData.clienteId));
-                await AsyncStorage.setItem('selectedTienda', String(userData.clienteId));
-              }
-            } catch (parseError) {
-              console.error('[AuthContext] Error al parsear datos de usuario:', parseError);
-              // Limpiar datos inválidos
-              await AsyncStorage.removeItem('@token');
-              await AsyncStorage.removeItem('@user');
-              setToken(null);
-              setUser(null);
-              setIsAuthenticated(false);
-            }
-          } else {
-            console.log('[AuthContext] No hay datos de usuario almacenados');
-            setIsAuthenticated(false);
-          }
-        } else {
-          console.log('[AuthContext] No hay token almacenado');
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error('[AuthContext] Error al cargar datos de usuario:', error);
-        setIsAuthenticated(false);
-      } finally {
-        // Indicar que la carga inicial ha terminado
-        setLoading(false);
-        setAuthReady(true);
-      }
-    };
-    
-    loadUserData();
-  }, []);
 
   /**
    * Inicia sesión con email y contraseña
@@ -345,19 +267,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         await authApi.logout();
       } catch (e) {
-        console.warn('[AuthContext] Error al notificar logout al servidor:', e);
+        console.warn('[Auth] Error al notificar logout al servidor:', e);
         // Continuamos con el proceso aunque falle la notificación al servidor
       }
       
       // Limpiar almacenamiento local
-      const removePromises = [
-        AsyncStorage.removeItem('@token'),
-        AsyncStorage.removeItem('@user'),
-        AsyncStorage.removeItem('tiendaId'),
-        AsyncStorage.removeItem('selectedTienda') // También limpiamos la tienda seleccionada
+      console.log('[Auth] Limpiando todos los datos de usuario de AsyncStorage');
+      
+      // Lista de todas las claves a eliminar para asegurar una limpieza completa
+      const keysToRemove = [
+        '@token',
+        '@refresh_token',
+        '@user',
+        '@userId',
+        '@clienteId',
+        '@tiendaId',
+        '@carrito',
+        '@lastSearch',
+        '@favorites',
+        'selectedTienda',
+        'tiendaId',
+        '@pendingNavigation',
+        '@forceNavigation'
       ];
       
-      await Promise.all(removePromises);
+      // Eliminar cada clave e informar del resultado
+      for (const key of keysToRemove) {
+        try {
+          await AsyncStorage.removeItem(key);
+          console.log(`[Auth] Eliminado ${key} de AsyncStorage`);
+        } catch (error) {
+          console.warn(`[Auth] Error al eliminar ${key} de AsyncStorage:`, error);
+        }
+      }
+      
+      console.log('[Auth] Sesión cerrada completamente, todos los datos de usuario eliminados');
       
       // Actualizar estado
       setToken(null);
@@ -377,6 +321,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoading(false); // Siempre terminamos la carga
     }
   };
+
+  useEffect(() => {
+    setGlobalLogoutFunction(logout);
+  }, [logout]);
 
   /**
    * Selecciona una tienda para el usuario actual
@@ -509,6 +457,85 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Ejecutar la función de guardado
     saveData();
   };
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        console.log('[AuthContext] Cargando datos de usuario desde AsyncStorage...');
+        
+        // Obtener token de AsyncStorage
+        const storedToken = await AsyncStorage.getItem('@token');
+        console.log('[AuthContext] Token almacenado:', storedToken ? 'Existe' : 'No existe');
+        
+        if (storedToken) {
+          // Establecer el token en el estado
+          setToken(storedToken);
+          
+          // Obtener datos de usuario
+          const storedUser = await AsyncStorage.getItem('@user');
+          console.log('[AuthContext] Usuario almacenado:', storedUser ? 'Existe' : 'No existe');
+          
+          if (storedUser) {
+            try {
+              let userData = JSON.parse(storedUser);
+              
+              // Verificar si el usuario es un string (doble serialización)
+              if (typeof userData === 'string') {
+                console.log('[AuthContext] Usuario almacenado es un string, intentando parsear nuevamente');
+                userData = JSON.parse(userData);
+              }
+              
+              console.log('[AuthContext] Datos de usuario cargados:', {
+                id: userData.id,
+                email: userData.email,
+                rol: userData.rol,
+                clienteId: userData.clienteId
+              });
+              
+              // Establecer los datos de usuario en el estado
+              setUser(userData);
+              
+              // IMPORTANTE: Establecer isAuthenticated como true DESPUÉS de cargar los datos
+              console.log('[AuthContext] Estableciendo estado de autenticación como true');
+              setIsAuthenticated(true);
+              
+              // Cargar tienda seleccionada
+              const selectedTienda = await AsyncStorage.getItem('selectedTienda');
+              if (selectedTienda) {
+                setTiendaId(Number(selectedTienda));
+              } else if (userData.clienteId) {
+                setTiendaId(Number(userData.clienteId));
+                await AsyncStorage.setItem('selectedTienda', String(userData.clienteId));
+              }
+            } catch (parseError) {
+              console.error('[AuthContext] Error al parsear datos de usuario:', parseError);
+              // Limpiar datos inválidos
+              await AsyncStorage.removeItem('@token');
+              await AsyncStorage.removeItem('@user');
+              setToken(null);
+              setUser(null);
+              setIsAuthenticated(false);
+            }
+          } else {
+            console.log('[AuthContext] No hay datos de usuario almacenados');
+            setIsAuthenticated(false);
+          }
+        } else {
+          console.log('[AuthContext] No hay token almacenado');
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error('[AuthContext] Error al cargar datos de usuario:', error);
+        setIsAuthenticated(false);
+      } finally {
+        // Indicar que la carga inicial ha terminado
+        setLoading(false);
+        setAuthReady(true);
+      }
+    };
+    
+    loadUserData();
+  }, []);
 
   // Proporcionar el contexto a los componentes hijos
   return (

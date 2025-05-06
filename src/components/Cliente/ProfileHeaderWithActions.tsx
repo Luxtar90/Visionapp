@@ -44,7 +44,11 @@ const ProfileHeaderWithActions: React.FC<ProfileHeaderWithActionsProps> = ({
         {!editing ? (
           <TouchableOpacity
             style={styles.editButton}
-            onPress={() => setEditing(true)}
+            onPress={() => {
+              // Inicializar editedProfile con los datos actuales del perfil
+              setEditedProfile(profile);
+              setEditing(true);
+            }}
           >
             <Ionicons name="pencil" size={20} color={colors.primary} />
             <Text style={styles.editButtonText}>Editar perfil</Text>

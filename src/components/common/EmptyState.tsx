@@ -7,15 +7,19 @@ import { colors } from '../../theme/colors';
 interface EmptyStateProps {
   icon: string;
   message: string;
+  description?: string;
   actionLabel?: string;
   onAction?: () => void;
 }
 
-export const EmptyState = ({ icon, message, actionLabel, onAction }: EmptyStateProps) => {
+export const EmptyState = ({ icon, message, description, actionLabel, onAction }: EmptyStateProps) => {
   return (
     <View style={styles.emptyContainer}>
       <Ionicons name={icon as any} size={80} color="#ccc" />
       <Text style={styles.emptyText}>{message}</Text>
+      {description && (
+        <Text style={styles.descriptionText}>{description}</Text>
+      )}
       {actionLabel && onAction && (
         <TouchableOpacity 
           style={styles.actionButton}
@@ -38,7 +42,14 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 16,
     fontSize: 16,
+    fontWeight: '600',
     color: colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  descriptionText: {
+    fontSize: 14,
+    color: colors.text + 'AA',
     textAlign: 'center',
     marginBottom: 16,
   },

@@ -1,18 +1,25 @@
 // src/interfaces/Cliente.ts
 
 export interface Cliente {
-  id: string;
-  nombre: string;
-  apellido: string;
+  id: number;
+  nombres: string;
+  apellidos: string;
+  identificacion: string;
   email: string;
   telefono: string;
-  direccion?: string;
+  direccion_detalle?: string;
+  direccion_ciudad?: string;
+  direccion_pais?: string;
   fecha_nacimiento?: string;
-  genero?: 'masculino' | 'femenino' | 'otro';
-  activo: boolean;
-  fecha_registro: string;
-  ultima_visita?: string;
-  foto_url?: string;
-  notas?: string;
-  tienda_id: string;
+  origen_cita?: string;
+  puntos_acumulados: number;
+  tiendaId: number | null;
+  tienda?: {
+    id: number;
+    nombre: string;
+    direccion: string;
+    telefono: string;
+    email_contacto: string;
+    fecha_registro: string;
+  } | null;
 }

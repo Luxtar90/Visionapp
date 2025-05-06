@@ -1,26 +1,26 @@
-// src/screens/Admin/EmpleadosScreen.tsx
+// src/screens/Admin/NuevoEmpleadosScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   StyleSheet, 
   FlatList, 
   RefreshControl,
-  TouchableOpacity
+  TouchableOpacity,
+  Text
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
 
 // Componentes
-import { Header } from '../../components/common/Header';
 import { SearchBar } from '../../components/common/SearchBar';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingIndicator } from '../../components/common/LoadingIndicator';
-import { EmpleadoCard, Empleado } from '../../components/Empleados/EmpleadoCard';
+import { EmpleadoCard } from '../../components/Empleados/EmpleadoCard';
 import { EmpleadoDetalleModal } from '../../components/Empleados/EmpleadoDetalleModal';
 import { EmpleadoForm } from '../../components/Empleados/EmpleadoForm';
 import { StatusMessage } from '../../components/common/StatusMessage';
-import { ActionButton } from '../../components/common/ActionButton';
 
 // API
 import { 
@@ -28,13 +28,14 @@ import {
   createEmpleado, 
   updateEmpleado, 
   deleteEmpleado,
-  toggleEmpleadoActivo
+  toggleEmpleadoActivo,
+  Empleado
 } from '../../api/empleados.api';
 
 // Tema
 import { colors } from '../../theme/colors';
 
-export default function EmpleadosScreen() {
+export default function NuevoEmpleadosScreen() {
   // Estado
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [filteredEmpleados, setFilteredEmpleados] = useState<Empleado[]>([]);
@@ -47,10 +48,13 @@ export default function EmpleadosScreen() {
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [tiendaId, setTiendaId] = useState<string | null>(null);
 
+  const navigation = useNavigation();
+
   // Cargar tienda seleccionada
   useEffect(() => {
     const loadTiendaId = async () => {
-      const storedTiendaId = await AsyncStorage.getItem('tiendaId');
+      const storedTiendaId = await AsyncStorage.getItem('selectedTienda');
+      console.log('Tienda ID cargada:', storedTiendaId);
       setTiendaId(storedTiendaId);
     };
     
@@ -93,22 +97,25 @@ export default function EmpleadosScreen() {
   );
 
   // Filtrar empleados cuando cambia la búsqueda
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    
+    if (query.trim() === '') {
       setFilteredEmpleados(empleados);
     } else {
-      const query = searchQuery.toLowerCase();
+      const normalizedQuery = query.toLowerCase();
       const filtered = empleados.filter(
         (empleado) =>
-          empleado.nombre.toLowerCase().includes(query) ||
-          empleado.apellido.toLowerCase().includes(query) ||
-          empleado.email.toLowerCase().includes(query) ||
-          empleado.telefono.includes(query) ||
-          empleado.especialidad.toLowerCase().includes(query)
+          (empleado.nombres && empleado.nombres.toLowerCase().includes(normalizedQuery)) ||
+          (empleado.apellidos && empleado.apellidos.toLowerCase().includes(normalizedQuery)) ||
+          (empleado.email && empleado.email.toLowerCase().includes(normalizedQuery)) ||
+          (empleado.telefono && empleado.telefono.includes(normalizedQuery)) ||
+          (empleado.cargo && empleado.cargo.toLowerCase().includes(normalizedQuery)) ||
+          (empleado.nivel_estudio && empleado.nivel_estudio.toLowerCase().includes(normalizedQuery))
       );
       setFilteredEmpleados(filtered);
     }
-  }, [searchQuery, empleados]);
+  }, [empleados]);
 
   // Refrescar la lista
   const handleRefresh = () => {
@@ -219,12 +226,12 @@ export default function EmpleadosScreen() {
   const handleToggleActivo = async (empleado: Empleado) => {
     try {
       setIsLoading(true);
-      await toggleEmpleadoActivo(empleado.id, !empleado.activo);
+      await toggleEmpleadoActivo(empleado.id, !empleado.activo_para_reservas);
       await loadEmpleados();
       
       setStatusMessage({
         type: 'success',
-        message: `Empleado ${empleado.activo ? 'desactivado' : 'activado'} correctamente`
+        message: `Empleado ${empleado.activo_para_reservas ? 'desactivado' : 'activado'} correctamente`
       });
     } catch (error) {
       setStatusMessage({
@@ -236,29 +243,10 @@ export default function EmpleadosScreen() {
     }
   };
 
-  // Renderizar el botón de agregar empleado
-  const renderAddButton = () => (
-    <TouchableOpacity 
-      style={styles.addButton}
-      onPress={handleOpenForm}
-    >
-      <Ionicons name="add" size={24} color="white" />
-    </TouchableOpacity>
-  );
-
   return (
     <View style={styles.container}>
-      <Header 
-        title="Empleados" 
-        rightComponent={
-          <TouchableOpacity onPress={handleOpenForm}>
-            <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
-          </TouchableOpacity>
-        }
-      />
-      
       {statusMessage && (
-        <View style={styles.statusContainer}>
+        <View style={styles.statusMessageContainer}>
           <StatusMessage
             type={statusMessage.type}
             message={statusMessage.message}
@@ -270,12 +258,32 @@ export default function EmpleadosScreen() {
       <View style={styles.searchContainer}>
         <SearchBar
           value={searchQuery}
-          onChangeText={setSearchQuery}
+          onChangeText={handleSearch}
           placeholder="Buscar empleados..."
+          style={styles.searchBarStyle}
         />
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={handleOpenForm}
+        >
+          <Ionicons name="add" size={24} color="white" />
+        </TouchableOpacity>
       </View>
       
-      {isLoading && !isRefreshing ? (
+      {!tiendaId ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="business-outline" size={64} color={colors.text + '40'} />
+          <Text style={styles.emptyText}>
+            No hay tienda seleccionada. Por favor, seleccione una tienda en su perfil.
+          </Text>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Perfil' as never)}
+          >
+            <Text style={styles.actionText}>Ir al perfil</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isLoading && !isRefreshing ? (
         <LoadingIndicator message="Cargando empleados..." />
       ) : filteredEmpleados.length === 0 ? (
         <EmptyState
@@ -299,10 +307,12 @@ export default function EmpleadosScreen() {
               onToggleActivo={handleToggleActivo}
             />
           )}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.listContainer}
           refreshControl={
             <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
           }
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          showsVerticalScrollIndicator={false}
         />
       )}
       
@@ -319,12 +329,6 @@ export default function EmpleadosScreen() {
       {/* Modal de formulario de creación */}
       {isFormVisible && (
         <View style={styles.formContainer}>
-          <Header 
-            title="Nuevo Empleado" 
-            showBackButton 
-            onBackPress={handleCloseForm} 
-          />
-          
           <EmpleadoForm
             onSubmit={handleCreateEmpleado}
             isLoading={isLoading}
@@ -332,9 +336,6 @@ export default function EmpleadosScreen() {
           />
         </View>
       )}
-      
-      {/* Botón flotante para agregar empleado */}
-      {!isFormVisible && renderAddButton()}
     </View>
   );
 }
@@ -343,19 +344,77 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-  },
-  statusContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 16,
   },
   searchContainer: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
   },
-  listContent: {
-    padding: 16,
+  searchBarStyle: {
+    flex: 1,
+    marginRight: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  addButton: {
+    backgroundColor: colors.primary,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  actionButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  actionText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  statusMessageContainer: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  separator: {
+    height: 12,
+  },
+  loadingMore: {
+    paddingVertical: 16,
   },
   formContainer: {
     position: 'absolute',
@@ -365,21 +424,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'white',
     zIndex: 100,
-  },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
 });

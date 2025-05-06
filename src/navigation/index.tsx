@@ -12,12 +12,24 @@ import ClienteTabNavigator from './ClienteTabNavigator';
 
 // Pantallas
 import SeleccionarTiendaScreen from '../screens/Cliente/SeleccionarTiendaScreen';
+import { DetalleClienteScreen } from '../screens/Admin';
 
 // Contexto de autenticación
 import useAuth from '../hooks/useAuth';
 
 // Crear el stack de navegación principal
 const Stack = createNativeStackNavigator();
+
+// Definir las rutas disponibles
+export type RootStackParamList = {
+  Login: undefined;
+  Register: undefined;
+  ForgotPassword: undefined;
+  Main: undefined;
+  SeleccionarTienda: undefined;
+  DetalleCliente: { cliente: any };
+  // Añadir más rutas según sea necesario
+};
 
 // Componente para pantalla de carga
 const LoadingScreen = () => (
@@ -107,6 +119,27 @@ const Navigation = () => {
     }
   }, [isAuthenticated, user, initialLoadComplete, selectedTienda]);
   
+  // Efecto para monitorear cambios en la tienda seleccionada en AsyncStorage
+  useEffect(() => {
+    const checkSelectedTienda = async () => {
+      try {
+        const storedTienda = await AsyncStorage.getItem('selectedTienda');
+        if (storedTienda !== selectedTienda) {
+          console.log('[Navigation] Tienda seleccionada actualizada en AsyncStorage:', storedTienda);
+          setSelectedTienda(storedTienda);
+        }
+      } catch (error) {
+        console.error('[Navigation] Error al verificar tienda seleccionada:', error);
+      }
+    };
+    
+    // Verificar la tienda seleccionada cada 1 segundo
+    const interval = setInterval(checkSelectedTienda, 1000);
+    
+    // Limpiar el intervalo cuando el componente se desmonte
+    return () => clearInterval(interval);
+  }, [selectedTienda]);
+  
   // Función para determinar qué navegador mostrar según el rol del usuario
   const getRoleNavigator = (rol: string | undefined) => {
     console.log('[Navigation] Seleccionando navegador para rol:', rol || 'no definido');
@@ -129,7 +162,12 @@ const Navigation = () => {
       case 'admin':
       case 'administrador':
         console.log('[Navigation] Usando navegador de administrador');
-        return <AdminTabNavigator />;
+        return (
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Main" component={AdminTabNavigator} />
+            <Stack.Screen name="DetalleCliente" component={DetalleClienteScreen} />
+          </Stack.Navigator>
+        );
       case 'empleado':
       case 'vendedor':
         console.log('[Navigation] Usando navegador de empleado');
@@ -175,6 +213,7 @@ const Navigation = () => {
         return (
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="SeleccionarTienda" component={SeleccionarTiendaScreen} />
+            <Stack.Screen name="DetalleCliente" component={DetalleClienteScreen} />
           </Stack.Navigator>
         );
       }

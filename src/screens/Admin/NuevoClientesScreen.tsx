@@ -5,14 +5,15 @@ import {
   StyleSheet, 
   FlatList, 
   RefreshControl,
-  TouchableOpacity
+  TouchableOpacity,
+  Text
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
 
 // Componentes
-import { Header } from '../../components/common/Header';
 import { SearchBar } from '../../components/common/SearchBar';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingIndicator } from '../../components/common/LoadingIndicator';
@@ -50,10 +51,13 @@ export default function ClientesScreen() {
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [tiendaId, setTiendaId] = useState<string | null>(null);
 
+  const navigation = useNavigation();
+
   // Cargar tienda seleccionada
   useEffect(() => {
     const loadTiendaId = async () => {
-      const storedTiendaId = await AsyncStorage.getItem('tiendaId');
+      const storedTiendaId = await AsyncStorage.getItem('selectedTienda');
+      console.log('Tienda ID cargada:', storedTiendaId);
       setTiendaId(storedTiendaId);
     };
     
@@ -62,18 +66,85 @@ export default function ClientesScreen() {
 
   // Cargar clientes
   const loadClientes = useCallback(async () => {
-    if (!tiendaId) return;
+    if (!tiendaId) {
+      console.log('No hay tienda seleccionada');
+      setIsLoading(false);
+      return;
+    }
     
     try {
       setIsLoading(true);
-      const data = await getClientes(tiendaId);
-      setClientes(data);
-      setFilteredClientes(data);
-    } catch (error) {
+      console.log('Cargando clientes para tienda:', tiendaId);
+      
+      // Verificar que el ID de tienda sea válido
+      if (tiendaId.trim() === '') {
+        console.error('ID de tienda inválido (vacío)');
+        setStatusMessage({
+          type: 'error',
+          message: 'ID de tienda inválido. Por favor, seleccione una tienda en su perfil.'
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Añadir un cliente de prueba si no hay datos
+      try {
+        const data = await getClientes(tiendaId);
+        console.log('Clientes cargados:', data ? data.length : 0);
+        
+        if (!data || data.length === 0) {
+          console.log('No hay clientes, creando uno de prueba...');
+          
+          // Crear un cliente de prueba
+          const clientePrueba: Partial<Cliente> = {
+            nombres: 'Cliente',
+            apellidos: 'Prueba',
+            identificacion: `temp-${Date.now()}`,
+            email: 'cliente.prueba@ejemplo.com',
+            telefono: '555-123-4567',
+            direccion_detalle: 'Calle Ejemplo 123',
+            fecha_nacimiento: new Date().toISOString(),
+            origen_cita: 'Aplicación móvil',
+            puntos_acumulados: 0,
+            tiendaId: tiendaId ? parseInt(tiendaId) : null
+          };
+          
+          try {
+            const nuevoCliente = await createCliente(clientePrueba);
+            console.log('Cliente de prueba creado:', nuevoCliente);
+            setClientes([nuevoCliente]);
+            setFilteredClientes([nuevoCliente]);
+            setStatusMessage({
+              type: 'success',
+              message: 'Se ha creado un cliente de prueba'
+            });
+          } catch (createError) {
+            console.error('Error al crear cliente de prueba:', createError);
+            setClientes([]);
+            setFilteredClientes([]);
+          }
+        } else {
+          setClientes(data);
+          setFilteredClientes(data);
+        }
+      } catch (error) {
+        console.error('Error al cargar los clientes:', error);
+        setStatusMessage({
+          type: 'error',
+          message: 'Error al cargar los clientes. Por favor, intenta de nuevo.'
+        });
+        // Inicializar con arrays vacíos para evitar errores
+        setClientes([]);
+        setFilteredClientes([]);
+      }
+    } catch (outerError) {
+      console.error('Error general en loadClientes:', outerError);
       setStatusMessage({
         type: 'error',
-        message: 'Error al cargar los clientes. Por favor, intenta de nuevo.'
+        message: 'Error inesperado. Por favor, intenta de nuevo.'
       });
+      setClientes([]);
+      setFilteredClientes([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -128,10 +199,9 @@ export default function ClientesScreen() {
     loadClientes();
   };
 
-  // Abrir modal de detalles
+  // Abrir pantalla de detalles
   const handleOpenModal = (cliente: Cliente) => {
-    setSelectedCliente(cliente);
-    setIsModalVisible(true);
+    navigation.navigate('DetalleCliente' as never, { cliente } as never);
   };
 
   // Cerrar modal de detalles
@@ -155,16 +225,21 @@ export default function ClientesScreen() {
     try {
       setIsLoading(true);
       
-      // Asignar fecha de registro
-      data.fecha_registro = new Date().toISOString();
-      data.activo = true;
+      // Preparar datos para la API
+      const clienteData: Partial<Cliente> = {
+        nombres: data.nombres || '',
+        apellidos: data.apellidos || '',
+        identificacion: data.identificacion || `temp-${Date.now()}`,
+        email: data.email || '',
+        telefono: data.telefono || '',
+        direccion_detalle: data.direccion_detalle || '',
+        fecha_nacimiento: data.fecha_nacimiento,
+        origen_cita: data.origen_cita || 'Aplicación móvil',
+        puntos_acumulados: 0,
+        tiendaId: tiendaId ? parseInt(tiendaId) : null
+      };
       
-      if (tiendaId) {
-        // Asumiendo que la API espera un campo tienda_id
-        data.tienda_id = tiendaId;
-      }
-      
-      await createCliente(data);
+      await createCliente(clienteData);
       await loadClientes();
       
       setStatusMessage({
@@ -189,7 +264,7 @@ export default function ClientesScreen() {
     
     try {
       setIsLoading(true);
-      await updateCliente(data.id, data);
+      await updateCliente(data.id.toString(), data);
       await loadClientes();
       
       setStatusMessage({
@@ -235,14 +310,25 @@ export default function ClientesScreen() {
   const handleToggleActivo = async (cliente: Cliente) => {
     try {
       setIsLoading(true);
-      await toggleClienteActivo(cliente.id, !cliente.activo);
+      
+      // En la nueva estructura, consideramos que un cliente está activo si tiene tiendaId
+      const isActive = cliente.tiendaId !== null;
+      
+      // Si está activo, lo desactivamos (quitamos la tienda)
+      // Si está inactivo, lo activamos (asignamos la tienda actual)
+      const updatedData: Partial<Cliente> = {
+        tiendaId: isActive ? null : (tiendaId ? parseInt(tiendaId) : null)
+      };
+      
+      await updateCliente(cliente.id.toString(), updatedData);
       await loadClientes();
       
       setStatusMessage({
         type: 'success',
-        message: `Cliente ${cliente.activo ? 'desactivado' : 'activado'} correctamente`
+        message: `Cliente ${isActive ? 'desactivado' : 'activado'} correctamente`
       });
     } catch (error) {
+      console.error('Error al cambiar el estado del cliente:', error);
       setStatusMessage({
         type: 'error',
         message: 'Error al cambiar el estado del cliente. Por favor, intenta de nuevo.'
@@ -252,27 +338,8 @@ export default function ClientesScreen() {
     }
   };
 
-  // Renderizar el botón de agregar cliente
-  const renderAddButton = () => (
-    <TouchableOpacity 
-      style={styles.addButton}
-      onPress={handleOpenForm}
-    >
-      <Ionicons name="add" size={24} color="white" />
-    </TouchableOpacity>
-  );
-
   return (
     <View style={styles.container}>
-      <Header 
-        title="Clientes" 
-        rightComponent={
-          <TouchableOpacity onPress={handleOpenForm}>
-            <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
-          </TouchableOpacity>
-        }
-      />
-      
       {statusMessage && (
         <View style={styles.statusContainer}>
           <StatusMessage
@@ -288,10 +355,30 @@ export default function ClientesScreen() {
           value={searchQuery}
           onChangeText={handleSearch}
           placeholder="Buscar clientes..."
+          style={styles.searchBarStyle}
         />
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={handleOpenForm}
+        >
+          <Ionicons name="add-circle" size={28} color={colors.primary} />
+        </TouchableOpacity>
       </View>
       
-      {isLoading && !isRefreshing ? (
+      {!tiendaId ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="business-outline" size={64} color={colors.text + '40'} />
+          <Text style={styles.emptyText}>
+            No hay tienda seleccionada. Por favor, seleccione una tienda en su perfil.
+          </Text>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Perfil' as never)}
+          >
+            <Text style={styles.actionText}>Ir al perfil</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isLoading && !isRefreshing ? (
         <LoadingIndicator message="Cargando clientes..." />
       ) : filteredClientes.length === 0 ? (
         <EmptyState
@@ -307,7 +394,7 @@ export default function ClientesScreen() {
       ) : (
         <FlatList
           data={filteredClientes}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={({ item }) => (
             <ClienteCard
               cliente={item}
@@ -322,25 +409,9 @@ export default function ClientesScreen() {
         />
       )}
       
-      {/* Modal de detalles del cliente */}
-      <ClienteDetalleModal
-        visible={isModalVisible}
-        cliente={selectedCliente}
-        onClose={handleCloseModal}
-        onUpdate={handleUpdateCliente}
-        onDelete={handleDeleteCliente}
-        isLoading={isLoading}
-      />
-      
       {/* Modal de formulario de creación */}
       {isFormVisible && (
         <View style={styles.formContainer}>
-          <Header 
-            title="Nuevo Cliente" 
-            showBackButton 
-            onBackPress={handleCloseForm} 
-          />
-          
           <ClienteForm
             onSubmit={handleCreateCliente}
             isLoading={isLoading}
@@ -348,9 +419,6 @@ export default function ClientesScreen() {
           />
         </View>
       )}
-      
-      {/* Botón flotante para agregar cliente */}
-      {!isFormVisible && renderAddButton()}
     </View>
   );
 }
@@ -359,19 +427,58 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-  },
-  statusContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 16,
   },
   searchContainer: {
-    padding: 16,
-    backgroundColor: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.border + '20',
+    marginTop: 8,
+  },
+  searchBarStyle: {
+    flex: 1,
+    marginRight: 8,
   },
   listContent: {
     padding: 16,
+    paddingTop: 8,
+  },
+  statusContainer: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  addButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: colors.text,
+    marginBottom: 16,
+  },
+  actionButton: {
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionText: {
+    fontSize: 16,
+    color: 'white',
   },
   formContainer: {
     position: 'absolute',
@@ -381,21 +488,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'white',
     zIndex: 100,
-  },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
 });

@@ -22,51 +22,50 @@ export const ClienteCard: React.FC<ClienteCardProps> = ({
     return date.toLocaleDateString();
   };
 
+  // Determinar si el cliente está activo basado en si tiene tiendaId
+  const isActive = cliente.tiendaId !== null;
+
   return (
     <TouchableOpacity
-      style={[styles.card, !cliente.activo && styles.inactiveCard]}
+      style={[styles.card, !isActive && styles.inactiveCard]}
       onPress={() => onPress(cliente)}
       activeOpacity={0.7}
     >
       <View style={styles.cardHeader}>
         <View style={styles.avatarContainer}>
-          {cliente.foto_url ? (
-            <Image source={{ uri: cliente.foto_url }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {cliente.nombre.charAt(0)}
-                {cliente.apellido.charAt(0)}
-              </Text>
-            </View>
-          )}
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarText}>
+              {cliente.nombres.charAt(0)}
+              {cliente.apellidos.charAt(0)}
+            </Text>
+          </View>
         </View>
         
         <View style={styles.infoContainer}>
           <Text style={styles.name}>
-            {cliente.nombre} {cliente.apellido}
+            {cliente.nombres} {cliente.apellidos}
           </Text>
           
           <View style={styles.detailRow}>
             <Ionicons name="mail-outline" size={16} color={colors.text} style={styles.icon} />
-            <Text style={styles.detailText}>{cliente.email}</Text>
+            <Text style={styles.detailText}>{cliente.email || 'Sin correo'}</Text>
           </View>
           
           <View style={styles.detailRow}>
             <Ionicons name="call-outline" size={16} color={colors.text} style={styles.icon} />
-            <Text style={styles.detailText}>{cliente.telefono}</Text>
+            <Text style={styles.detailText}>{cliente.telefono || 'Sin teléfono'}</Text>
           </View>
         </View>
         
         {onToggleActivo && (
-          <TouchableOpacity
-            style={styles.statusButton}
+          <TouchableOpacity 
+            style={styles.toggleButton}
             onPress={() => onToggleActivo(cliente)}
           >
-            <Ionicons
-              name={cliente.activo ? 'checkmark-circle' : 'close-circle'}
-              size={24}
-              color={cliente.activo ? colors.success : colors.error}
+            <Ionicons 
+              name={isActive ? "checkmark-circle" : "close-circle"} 
+              size={24} 
+              color={isActive ? colors.success : colors.error} 
             />
           </TouchableOpacity>
         )}
@@ -74,20 +73,29 @@ export const ClienteCard: React.FC<ClienteCardProps> = ({
       
       <View style={styles.cardFooter}>
         <View style={styles.footerItem}>
-          <Ionicons name="calendar-outline" size={14} color={colors.text + '80'} />
+          <Ionicons name="calendar-outline" size={16} color={colors.text + '80'} />
           <Text style={styles.footerText}>
-            Registro: {formatDate(cliente.fecha_registro)}
+            {cliente.fecha_nacimiento ? formatDate(cliente.fecha_nacimiento) : 'Sin fecha de nacimiento'}
           </Text>
         </View>
         
-        {cliente.ultima_visita && (
-          <View style={styles.footerItem}>
-            <Ionicons name="time-outline" size={14} color={colors.text + '80'} />
-            <Text style={styles.footerText}>
-              Última visita: {formatDate(cliente.ultima_visita)}
-            </Text>
-          </View>
-        )}
+        <View style={styles.footerItem}>
+          <Ionicons name="location-outline" size={16} color={colors.text + '80'} />
+          <Text style={styles.footerText} numberOfLines={1} ellipsizeMode="tail">
+            {cliente.direccion_detalle ? 
+              (cliente.direccion_detalle.length > 25 ? 
+                cliente.direccion_detalle.substring(0, 25) + '...' : 
+                cliente.direccion_detalle) : 
+              (cliente.direccion_ciudad || 'Sin dirección')}
+          </Text>
+        </View>
+        
+        <View style={styles.footerItem}>
+          <Ionicons name="gift-outline" size={16} color={colors.text + '80'} />
+          <Text style={styles.footerText}>
+            {cliente.puntos_acumulados} puntos
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -104,11 +112,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
+    borderWidth: 0,
   },
   inactiveCard: {
-    borderLeftColor: colors.border,
     opacity: 0.7,
   },
   cardHeader: {
@@ -117,11 +123,6 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginRight: 12,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
   },
   avatarPlaceholder: {
     width: 50,
@@ -148,7 +149,7 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    marginBottom: 2,
   },
   icon: {
     marginRight: 6,
@@ -157,24 +158,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text + 'CC',
   },
-  statusButton: {
+  toggleButton: {
     padding: 8,
   },
   cardFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border + '40',
+    borderTopColor: colors.border + '30',
   },
   footerItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
   footerText: {
     fontSize: 12,
-    color: colors.text + '80',
+    color: colors.text + '99',
     marginLeft: 4,
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
   },
 });

@@ -34,7 +34,7 @@ interface TiendasResponse {
 export default function SeleccionarTiendaScreen() {
   const [tiendas, setTiendas] = useState<Tienda[]>([]);
   const [loading, setLoading] = useState(true);
-  const { logout } = useAuth();
+  const { logout, updateAuthState } = useAuth();
   
   // URL base para las solicitudes a la API
   const baseURL = 'http://10.0.2.2:3001';
@@ -89,6 +89,27 @@ export default function SeleccionarTiendaScreen() {
       
       // Guardar el ID de la tienda seleccionada en AsyncStorage
       await AsyncStorage.setItem('selectedTienda', tienda.id.toString());
+      
+      // Obtener el usuario actual para actualizar el estado de autenticación
+      const userDataString = await AsyncStorage.getItem('@user');
+      const token = await AsyncStorage.getItem('@token');
+      
+      if (userDataString && token) {
+        const userData = JSON.parse(userDataString);
+        
+        // Actualizar el estado de autenticación con la tienda seleccionada
+        console.log('[AuthContext] Tienda guardada:', tienda.id);
+        console.log('[AuthContext] Datos guardados en AsyncStorage correctamente');
+        
+        // Forzar una actualización del estado de autenticación
+        updateAuthState(token, userData);
+        
+        // Forzar una segunda actualización después de un breve retraso
+        setTimeout(() => {
+          console.log('[AuthContext] Forzando segunda actualización del estado');
+          updateAuthState(token, userData);
+        }, 300);
+      }
       
       // Mostrar mensaje de éxito
       Alert.alert(

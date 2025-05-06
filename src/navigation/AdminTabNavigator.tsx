@@ -4,23 +4,25 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
-// Import screens directamente
-import { ClientesScreen } from '../screens/Admin/ClientesScreen';
-import EstadisticasScreen from '../screens/Admin/EstadisticasScreen';
-import { InventarioScreen } from '../screens/Admin/InventarioScreen';
-import NuevoEmpleadosScreen from '../screens/Admin/NuevoEmpleadosScreen';
-import NuevoServiciosScreen from '../screens/Admin/NuevoServiciosScreen';
-import NuevoReservasScreen from '../screens/Admin/NuevoReservasScreen';
-import TiendasScreen from '../screens/Admin/TiendasScreen';
+// Import screens
+import {
+  DashboardScreen,
+  ClientesScreen,
+  EmpleadosScreen,
+  ServiciosScreen,
+  ProductosScreen,
+  ReservasScreen,
+  VentasScreen,
+  ConfiguracionScreen,
+  PerfilScreen,
+  CatalogoServiciosScreen,
+  ContabilidadScreen,
+  InformesFinancierosScreen,
+  MarketingScreen
+} from '../screens/Admin';
 
-// Crear alias para las pantallas
-const DashboardScreen = EstadisticasScreen;
-const EmpleadosScreen = NuevoEmpleadosScreen;
-const ServiciosScreen = NuevoServiciosScreen;
-const ProductosScreen = InventarioScreen;
-const ReservasScreen = NuevoReservasScreen;
-const VentasScreen = EstadisticasScreen;
-const ConfiguracionScreen = TiendasScreen;
+// Import custom tab bar
+import CustomTabBar from '../components/Admin/CustomTabBar';
 
 const Tab = createBottomTabNavigator();
 
@@ -39,13 +41,13 @@ export default function AdminTabNavigator() {
               iconName = focused ? 'people' : 'people-outline';
               break;
             case 'Empleados':
-              iconName = focused ? 'briefcase' : 'briefcase-outline';
+              iconName = focused ? 'person' : 'person-outline';
               break;
             case 'Servicios':
               iconName = focused ? 'cut' : 'cut-outline';
               break;
             case 'Productos':
-              iconName = focused ? 'pricetag' : 'pricetag-outline';
+              iconName = focused ? 'cube' : 'cube-outline';
               break;
             case 'Reservas':
               iconName = focused ? 'calendar' : 'calendar-outline';
@@ -56,55 +58,52 @@ export default function AdminTabNavigator() {
             case 'Configuracion':
               iconName = focused ? 'settings' : 'settings-outline';
               break;
+            case 'Perfil':
+              iconName = focused ? 'person-circle' : 'person-circle-outline';
+              break;
+            case 'CatalogoServicios':
+              iconName = focused ? 'list' : 'list-outline';
+              break;
+            case 'Contabilidad':
+              iconName = focused ? 'calculator' : 'calculator-outline';
+              break;
+            case 'InformesFinancieros':
+              iconName = focused ? 'bar-chart' : 'bar-chart-outline';
+              break;
+            case 'Marketing':
+              iconName = focused ? 'megaphone' : 'megaphone-outline';
+              break;
           }
 
           return <Ionicons name={iconName as any} size={size} color={color} />;
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: 'gray',
-        headerShown: true,
+        headerShown: false
       })}
+      tabBar={(props: any) => <CustomTabBar {...props} />}
     >
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Clientes" component={ClientesScreen} />
+      <Tab.Screen name="Empleados" component={EmpleadosScreen} />
+      <Tab.Screen name="Servicios" component={ServiciosScreen} />
+      <Tab.Screen name="Productos" component={ProductosScreen} />
+      <Tab.Screen name="Reservas" component={ReservasScreen} />
+      <Tab.Screen name="Ventas" component={VentasScreen} />
+      <Tab.Screen name="Configuracion" component={ConfiguracionScreen} />
+      <Tab.Screen name="Perfil" component={PerfilScreen} />
       <Tab.Screen 
-        name="Dashboard" 
-        component={DashboardScreen} 
-        options={{ title: 'Dashboard' }}
+        name="CatalogoServicios" 
+        component={CatalogoServiciosScreen} 
+        options={{ title: 'Catálogo de Servicios' }}
       />
+      <Tab.Screen name="Contabilidad" component={ContabilidadScreen} />
       <Tab.Screen 
-        name="Clientes" 
-        component={ClientesScreen} 
-        options={{ title: 'Clientes' }}
+        name="InformesFinancieros" 
+        component={InformesFinancierosScreen}
+        options={{ title: 'Informes Financieros' }}
       />
-      <Tab.Screen 
-        name="Empleados" 
-        component={EmpleadosScreen} 
-        options={{ title: 'Empleados' }}
-      />
-      <Tab.Screen 
-        name="Servicios" 
-        component={ServiciosScreen} 
-        options={{ title: 'Servicios' }}
-      />
-      <Tab.Screen 
-        name="Productos" 
-        component={ProductosScreen} 
-        options={{ title: 'Productos' }}
-      />
-      <Tab.Screen 
-        name="Reservas" 
-        component={ReservasScreen} 
-        options={{ title: 'Reservas' }}
-      />
-      <Tab.Screen 
-        name="Ventas" 
-        component={VentasScreen} 
-        options={{ title: 'Ventas' }}
-      />
-      <Tab.Screen 
-        name="Configuracion" 
-        component={ConfiguracionScreen} 
-        options={{ title: 'Configuración' }}
-      />
+      <Tab.Screen name="Marketing" component={MarketingScreen} />
     </Tab.Navigator>
   );
 }

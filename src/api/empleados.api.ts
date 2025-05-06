@@ -2,14 +2,26 @@ import { client } from './client';
 
 export interface Empleado {
   id: string;
-  nombre: string;
-  apellido: string;
+  nombres: string;
+  apellidos: string;
   email: string;
   telefono: string;
-  especialidad: string;
-  activo: boolean;
+  cargo?: string;
+  nivel_estudio?: string;
+  activo_para_reservas: boolean;
   foto_url?: string;
-  tienda_id?: string;
+  tiendaId?: number | null;
+  identificacion?: string;
+  fecha_nacimiento?: string;
+  color_asignado?: string;
+  direccion_pais?: string;
+  direccion_ciudad?: string;
+  direccion_detalle?: string;
+  tipo_contrato?: string;
+  nivel_crecimiento?: string;
+  fecha_inicio_contrato?: string;
+  id_equipo?: number;
+  tienda?: any;
 }
 
 export const getEmpleados = async (tiendaId?: string): Promise<Empleado[]> => {
@@ -37,6 +49,6 @@ export const deleteEmpleado = async (id: string): Promise<void> => {
 };
 
 export const toggleEmpleadoActivo = async (id: string, activo: boolean): Promise<Empleado> => {
-  const { data } = await client.patch(`/empleados/${id}/estado`, { activo });
+  const { data } = await client.patch(`/empleados/${id}/estado`, { activo_para_reservas: activo });
   return data;
 };
