@@ -1,5 +1,5 @@
 // Importamos las pantallas de Admin que existen
-import NuevoClientesScreen from './NuevoClientesScreen';
+import { ClientesScreen } from './ClientesScreen';
 import EstadisticasScreen from './EstadisticasScreen';
 import { InventarioScreen } from './InventarioScreen';
 import { NotificacionesScreen } from './NotificacionesScreen';
@@ -14,11 +14,12 @@ import ContabilidadScreen from './ContabilidadScreen';
 import InformesFinancierosScreen from './InformesFinancierosScreen';
 import MarketingScreen from './MarketingScreen';
 import DetalleClienteScreen from './DetalleClienteScreen';
+import NuevoClientesScreen from './NuevoClientesScreen';
 
 // Exportamos todas las pantallas
 export {
   DashboardScreen,
-  NuevoClientesScreen as ClientesScreen,
+  ClientesScreen,
   EstadisticasScreen,
   InventarioScreen as ProductosScreen,
   NuevoEmpleadosScreen as EmpleadosScreen,
@@ -32,5 +33,6 @@ export {
   ContabilidadScreen,
   InformesFinancierosScreen,
   MarketingScreen,
-  DetalleClienteScreen
+  DetalleClienteScreen,
+  NuevoClientesScreen
 };

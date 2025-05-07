@@ -20,9 +20,15 @@ export interface UsuarioTiendaRelacion {
   tienda: Tienda;
 }
 
+export interface TiendasResponse {
+  items: Tienda[];
+  total: number;
+}
+
 export const getTiendas = async (params?: { activas?: boolean }): Promise<Tienda[]> => {
-  const { data } = await client.get('/tiendas', { params });
-  return data;
+  const { data } = await client.get<TiendasResponse>('/tiendas', { params });
+  // La API devuelve un objeto con items y total, pero solo necesitamos los items
+  return data.items || [];
 };
 
 export const getTiendaById = async (id: string): Promise<Tienda> => {

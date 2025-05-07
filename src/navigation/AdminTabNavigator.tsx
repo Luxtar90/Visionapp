@@ -18,7 +18,8 @@ import {
   CatalogoServiciosScreen,
   ContabilidadScreen,
   InformesFinancierosScreen,
-  MarketingScreen
+  MarketingScreen,
+  NuevoClientesScreen
 } from '../screens/Admin';
 
 // Import custom tab bar
@@ -85,6 +86,7 @@ export default function AdminTabNavigator() {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Clientes" component={ClientesScreen} />
+      <Tab.Screen name="NuevoClientes" component={NuevoClientesScreen} options={{ tabBarButton: () => null }} />
       <Tab.Screen name="Empleados" component={EmpleadosScreen} />
       <Tab.Screen name="Servicios" component={ServiciosScreen} />
       <Tab.Screen name="Productos" component={ProductosScreen} />

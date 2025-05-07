@@ -1,5 +1,6 @@
 // src/api/permisos.api.ts
 import { client } from './client';
+import { getUsuarioPorEmpleadoId } from './usuarios.api';
 
 // ===== ROLES =====
 
@@ -15,7 +16,7 @@ export const getRoles = async (): Promise<Rol[]> => {
 };
 
 // Obtener un rol por ID
-export const getRolById = async (id: string): Promise<Rol> => {
+export const getRolById = async (id: number): Promise<Rol> => {
   try {
     const { data } = await client.get(`/roles/${id}`);
     return data;
@@ -161,11 +162,11 @@ export const actualizarRolPermiso = async (id: string, data: Partial<RolPermiso>
     const datosParaEnviar: Record<string, any> = {};
     
     if (data.rolId !== undefined) {
-      datosParaEnviar.rol_id = parseInt(data.rolId);
+      datosParaEnviar.rol_id = typeof data.rolId === 'string' ? parseInt(data.rolId) : data.rolId;
     }
     
     if (data.permisoId !== undefined) {
-      datosParaEnviar.permiso_id = parseInt(data.permisoId);
+      datosParaEnviar.permiso_id = typeof data.permisoId === 'string' ? parseInt(data.permisoId) : data.permisoId;
     }
     
     const { data: responseData } = await client.patch(`/rol-permiso/${id}`, datosParaEnviar);
@@ -250,7 +251,7 @@ export const asignarPermisoAEmpleado = async (empleadoId: string, permisoId: str
 };
 
 // Asignar un rol a un empleado (asignando todos los permisos asociados al rol)
-export const asignarRolEmpleado = async (empleadoId: string, rolId: string): Promise<any> => {
+export const asignarRolEmpleado = async (empleadoId: string, rolId: number): Promise<any> => {
   try {
     console.log(`Asignando rol ID ${rolId} al empleado ID ${empleadoId}`);
     
@@ -272,7 +273,7 @@ export const asignarRolEmpleado = async (empleadoId: string, rolId: string): Pro
       console.log(`El rol ${rol.nombre} no tiene permisos asignados en la base de datos`);
       
       // Si es el rol 'empleado' (ID 3), asignar permisos por defecto
-      if (rol.nombre.toLowerCase() === 'empleado' || rolId === '3') {
+      if (rol.nombre.toLowerCase() === 'empleado' || (typeof rolId === 'number' && rolId === 3) || (typeof rolId === 'string' && rolId === '3')) {
         console.log(`Asignando permisos por defecto para el rol 'empleado'`);
         // Permisos básicos para un empleado: 1, 5, 9, 10, 11
         permisosIds = ['1', '5', '9', '10', '11'];
@@ -375,30 +376,31 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
   try {
     console.log(`[DEBUG] Intentando obtener rol para empleado ID: ${empleadoId}`);
     
-    // Primero, intentamos obtener el usuario asociado al empleado
-    const { data: usuariosData } = await client.get(`/usuarios?empleado_id=${empleadoId}`);
-    console.log(`[DEBUG] Usuarios asociados al empleado ${empleadoId}:`, usuariosData);
+    // Usar la nueva función para obtener el usuario directamente por ID de empleado
+    const usuario = await getUsuarioPorEmpleadoId(parseInt(empleadoId));
+    console.log(`[DEBUG] Usuario asociado al empleado ${empleadoId}:`, usuario);
     
     // Si encontramos un usuario asociado al empleado
-    if (usuariosData && usuariosData.length > 0) {
-      const usuario = usuariosData[0]; // Tomamos el primer usuario asociado
-      
-      // Si el usuario tiene un rolId asignado
-      if (usuario.rolId) {
-        console.log(`[DEBUG] Usuario tiene rolId asignado: ${usuario.rolId}`);
+    if (usuario) {
+      // Si el usuario tiene un rol asignado
+      if (usuario.rol) {
+        console.log(`[DEBUG] Usuario tiene rol asignado: ${usuario.rol.id}`);
         
-        // Obtenemos el rol
-        const rol = await getRolById(usuario.rolId.toString());
-        console.log(`[DEBUG] Rol obtenido:`, rol);
-        
-        if (rol) {
+        if (usuario.rol) {
           return {
             id: usuario.id,
             nombre_usuario: usuario.nombre_usuario || '',
             email: usuario.email || '',
-            rolId: usuario.rolId.toString(),
-            empleadoId: empleadoId,
-            rol: rol
+            rolId: usuario.rol.id,
+            empleadoId: parseInt(empleadoId),
+            clienteId: usuario.cliente_id || undefined,
+            rol: {
+              id: usuario.rol.id,
+              nombre: usuario.rol.nombre,
+              descripcion: usuario.rol && typeof usuario.rol === 'object' && 'descripcion' in usuario.rol ? String(usuario.rol.descripcion) : '',
+              nivel: usuario.rol && typeof usuario.rol === 'object' && 'nivel' in usuario.rol ? Number(usuario.rol.nivel) : 0,
+              permisos: usuario.rol && typeof usuario.rol === 'object' && 'permisos' in usuario.rol ? usuario.rol.permisos as Permiso[] : []
+            }
           };
         }
       }
@@ -534,11 +536,11 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
               console.log(`[DEBUG] Preferimos asignar el rol 'empleado' en lugar de 'cliente'`);
               
               return {
-                id: empleadoId,
+                id: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
                 nombre_usuario: '',
                 email: '',
                 rolId: rolEmpleado.id,
-                empleadoId: empleadoId,
+                empleadoId: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
                 rol: rolEmpleado
               };
             }
@@ -546,11 +548,11 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
         }
         
         return {
-          id: empleadoId,
+          id: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
           nombre_usuario: '',
           email: '',
           rolId: rol.id,
-          empleadoId: empleadoId,
+          empleadoId: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
           rol: rol
         };
       }
@@ -594,11 +596,11 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
           console.log(`[DEBUG] Preferimos asignar el rol 'empleado' en lugar de 'cliente'`);
           
           return {
-            id: empleadoId,
+            id: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
             nombre_usuario: '',
             email: '',
             rolId: rolEmpleado.id,
-            empleadoId: empleadoId,
+            empleadoId: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
             rol: rolEmpleado
           };
         }
@@ -613,21 +615,21 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
       if (rolEmpleado) {
         console.log(`[DEBUG] Forzando el rol 'empleado' para el empleado ${empleadoId}`);
         return {
-          id: empleadoId,
+          id: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
           nombre_usuario: '',
           email: '',
           rolId: rolEmpleado.id,
-          empleadoId: empleadoId,
+          empleadoId: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
           rol: rolEmpleado
         };
       }
       
       return {
-        id: empleadoId,
+        id: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
         nombre_usuario: '',
         email: '',
         rolId: rolMasAdecuado.id,
-        empleadoId: empleadoId,
+        empleadoId: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
         rol: rolMasAdecuado
       };
     }
@@ -636,11 +638,11 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
     if (rolEmpleado) {
       console.log(`[DEBUG] No se encontró un rol adecuado, asignando 'empleado' por defecto para ${empleadoId}`);
       return {
-        id: empleadoId,
+        id: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
         nombre_usuario: '',
         email: '',
         rolId: rolEmpleado.id,
-        empleadoId: empleadoId,
+        empleadoId: typeof empleadoId === 'string' ? parseInt(empleadoId) : empleadoId,
         rol: rolEmpleado
       };
     }
@@ -655,12 +657,12 @@ export const getRolEmpleado = async (empleadoId: string): Promise<UsuarioRol | n
 };
 
 export interface Permiso {
-  id: string;
+  id: number;
   nombre: string;
 }
 
 export interface Rol {
-  id: string;
+  id: number;
   nombre: string;
   descripcion: string;
   nivel: number;
@@ -668,17 +670,17 @@ export interface Rol {
 }
 
 export interface RolPermiso {
-  id: string;
-  rolId: string;
-  permisoId: string;
+  id: number;
+  rolId: number;
+  permisoId: number;
 }
 
 export interface UsuarioRol {
-  id: string;
+  id: number;
   nombre_usuario: string;
   email: string;
-  rolId: string;
-  empleadoId?: string;
-  clienteId?: string;
+  rolId: number;
+  empleadoId?: number;
+  clienteId?: number;
   rol?: Rol;
 }
